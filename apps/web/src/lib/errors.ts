@@ -12,6 +12,7 @@ export const ERROR_ACTIONS: Readonly<Record<ErrorCode, readonly ErrorAction[]>> 
   [ErrorCode.SignalingUnreachable]: ['retry', 'useQr'],
   [ErrorCode.PeerTimeout]: ['keepWaiting', 'copyLink'],
   [ErrorCode.IceFailed]: ['configureTurn', 'learnMore'],
+  [ErrorCode.ConnectionLost]: ['tryAgain'],
   [ErrorCode.LinkInvalid]: ['askNewLink'],
   [ErrorCode.Declined]: ['startOver'],
   [ErrorCode.ProtocolError]: ['tryAgain'],

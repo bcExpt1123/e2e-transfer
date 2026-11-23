@@ -6,6 +6,7 @@ export const ErrorCode = {
   SignalingUnreachable: 'SIGNALING_UNREACHABLE',
   PeerTimeout: 'PEER_TIMEOUT',
   IceFailed: 'ICE_FAILED',
+  ConnectionLost: 'CONNECTION_LOST',
   LinkInvalid: 'LINK_INVALID',
   Declined: 'DECLINED',
   ProtocolError: 'PROTOCOL_ERROR',

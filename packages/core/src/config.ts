@@ -13,8 +13,14 @@ export interface TransferConfig {
   bufferedAmountHigh: number;
   /** Resume sending when `bufferedAmount` drops below this. */
   bufferedAmountLow: number;
-  /** Receiver sends an ACK at least every this many bytes. */
+  /** Receiver sends an ACK at least every this many bytes (protocol cap: ACK_INTERVAL_MAX). */
   ackInterval: number;
+  /**
+   * Flow-control window: the sender pauses while more than this many bytes are
+   * sent but not yet ACKed as written. DataChannels have no receive-side
+   * backpressure, so without this a slow disk would buffer unboundedly in RAM.
+   */
+  maxUnackedBytes: number;
   /** Signaling messages older/newer than this (ms) are dropped. */
   signalingMaxSkewMs: number;
   /** Upper bound on files in a manifest. */
@@ -30,6 +36,7 @@ export const DEFAULT_CONFIG: Readonly<TransferConfig> = Object.freeze({
   bufferedAmountHigh: 4 * MiB,
   bufferedAmountLow: 1 * MiB,
   ackInterval: 1 * MiB,
+  maxUnackedBytes: 16 * MiB,
   signalingMaxSkewMs: 120_000,
   maxFiles: 10_000,
 });
@@ -45,5 +52,15 @@ export function resolveConfig(overrides: Partial<TransferConfig> = {}): Transfer
   if (cfg.bufferedAmountLow >= cfg.bufferedAmountHigh) {
     throw new RangeError('bufferedAmountLow must be below bufferedAmountHigh');
   }
+  if (cfg.ackInterval <= 0 || cfg.ackInterval > ACK_INTERVAL_MAX) {
+    throw new RangeError(`ackInterval must be in (0, ${ACK_INTERVAL_MAX}]`);
+  }
+  // Peers may use different configs; the window must exceed any compliant peer's ACK spacing.
+  if (cfg.maxUnackedBytes < 2 * ACK_INTERVAL_MAX) {
+    throw new RangeError(`maxUnackedBytes must be at least ${2 * ACK_INTERVAL_MAX}`);
+  }
   return cfg;
 }
+
+/** Protocol rule (PROTOCOL §5): receivers ACK at least every 1 MiB written and at every FILE_END. */
+export const ACK_INTERVAL_MAX = 1 * MiB;

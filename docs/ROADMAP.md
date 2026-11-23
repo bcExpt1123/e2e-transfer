@@ -18,12 +18,13 @@ README, [ARCHITECTURE](ARCHITECTURE.md), [PROTOCOL](PROTOCOL.md), [SECURITY](SEC
 **Done when:** `pnpm install && pnpm lint && pnpm -r typecheck && pnpm test && pnpm build` passes on a clean checkout and in CI. The
 shell scores ≥ 95 on Lighthouse performance and accessibility, and the bundle stays within the [UX budgets](UX.md#performance-budgets-enforced-in-ci).
 
-## Phase 2: Core engine (no network)
+## Phase 2: Core engine (no network) ✅
 
 - `keys.ts`: the HKDF tree, with fixed test vectors.
 - `protocol.ts`: frame encode/decode, AEAD, counters, HELLO.
 - `sender.ts` / `receiver.ts` over a `MessageChannelLike` abstraction, plus a `LoopbackChannel` with simulated `bufferedAmount`.
-- `storage/memory` sink.
+- `storage/memory` sink (landed in phase 1).
+- Flow-control window (`maxUnackedBytes`) so a slow disk cannot exhaust receiver memory (PROTOCOL §4.4).
 
 **Done when:** unit tests transfer 3 files (0 B, 1 B, 50 MiB) through the loopback; any tampered, reordered or replayed frame fails; malicious paths are rejected.
 

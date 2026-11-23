@@ -104,6 +104,7 @@ Core emits typed `ErrorCode`s, and `apps/web/src/lib/errors.ts` is the **only** 
 | `SIGNALING_UNREACHABLE` | "Can't reach the matchmaking network."           | Retry · Use QR instead                |
 | `PEER_TIMEOUT`          | "The other device hasn't connected yet."         | Keep waiting · Copy link again        |
 | `ICE_FAILED`            | "Your networks block direct connections."        | Configure a relay (TURN) · Learn more |
+| `CONNECTION_LOST`       | "The connection to the other device was lost."   | Try again (resume in phase 6)         |
 | `LINK_INVALID`          | "This link is incomplete or damaged."            | Ask the sender for a new link         |
 | `DECLINED`              | "The other device declined."                     | Start over                            |
 | `PROTOCOL_ERROR`        | "The transfer was interrupted for safety."       | Try again                             |

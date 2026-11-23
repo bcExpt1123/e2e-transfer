@@ -106,6 +106,18 @@ S                                   R
 │◄────────────────────────── DONE ──│        close
 ```
 
+**Flow control.** A DataChannel has no receive-side backpressure: if the receiver's disk is slower than
+the network, incoming frames pile up in its memory. Therefore:
+
+- The receiver MUST send `ACK` at least every `ACK_INTERVAL_MAX` (1 MiB) of data **durably written**, and at every `FILE_END`.
+- The sender MUST NOT have more than `maxUnackedBytes` (default 16 MiB, at least 2 MiB) sent but unacknowledged.
+- Separately, the sender pauses while its own `bufferedAmount` exceeds the high watermark (§5).
+
+**Ending a session.** `CANCEL` and `ERROR` may be sent by either side at any time and end the session at once.
+The receiving side reports the peer's code to the user and does not reply. A side that closes its channel
+lets queued frames (including a final `DONE`, `REJECT`, `CANCEL` or `ERROR`) reach the peer first. A close with no
+terminal frame before it is reported as `CONNECTION_LOST`.
+
 ### 4.5 Integrity
 
 AEAD per frame, strict counters and the `FILE_END` size check together guarantee that the receiver gets exactly the bytes the sender sent, in order and
@@ -123,7 +135,8 @@ continues from those offsets.
 | ------------------------- | --------------- |
 | chunkSize (plaintext)     | 61 440 (60 KiB) |
 | bufferedAmount high / low | 4 MiB / 1 MiB   |
-| ACK interval              | 1 MiB           |
+| ACK interval              | 1 MiB (maximum) |
+| maxUnackedBytes (window)  | 16 MiB          |
 | Signaling message max age | 120 s           |
 | Max files per manifest    | 10 000          |
 

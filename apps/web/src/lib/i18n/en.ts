@@ -62,6 +62,7 @@ export const en = {
     SIGNALING_UNREACHABLE: "Can't reach the matchmaking network.",
     PEER_TIMEOUT: "The other device hasn't connected yet.",
     ICE_FAILED: 'Your networks block direct connections.',
+    CONNECTION_LOST: 'The connection to the other device was lost.',
     LINK_INVALID: 'This link is incomplete or damaged.',
     DECLINED: 'The other device declined.',
     PROTOCOL_ERROR: 'The transfer was interrupted for safety.',
