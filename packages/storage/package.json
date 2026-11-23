@@ -1,0 +1,16 @@
+{
+  "name": "@e2e-transfer/storage",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@e2e-transfer/core": "workspace:*"
+  }
+}

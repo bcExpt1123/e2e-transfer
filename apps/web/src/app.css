@@ -1,0 +1,43 @@
+@import "tailwindcss";
+@import "./lib/ui/tokens.css";
+
+/* Map design tokens to Tailwind utilities: bg-surface, text-muted, border-border, rounded-lg, … */
+@theme inline {
+  --color-bg: var(--ds-bg);
+  --color-surface: var(--ds-surface);
+  --color-surface-2: var(--ds-surface-2);
+  --color-border: var(--ds-border);
+  --color-text: var(--ds-text);
+  --color-muted: var(--ds-muted);
+  --color-accent: var(--ds-accent);
+  --color-accent-hover: var(--ds-accent-hover);
+  --color-accent-fg: var(--ds-accent-fg);
+  --color-accent-soft: var(--ds-accent-soft);
+  --color-success: var(--ds-success);
+  --color-danger: var(--ds-danger);
+  --color-focus: var(--ds-focus);
+  --color-overlay: var(--ds-overlay);
+  --radius-sm: var(--ds-radius-sm);
+  --radius-md: var(--ds-radius-md);
+  --radius-lg: var(--ds-radius-lg);
+  --shadow-md: var(--ds-shadow-md);
+  --shadow-lg: var(--ds-shadow-lg);
+  --default-transition-duration: var(--ds-duration-fast);
+}
+
+@layer base {
+  html {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg text-text antialiased;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ds-focus);
+    outline-offset: 2px;
+  }
+}

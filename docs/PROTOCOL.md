@@ -5,10 +5,10 @@ Strings are UTF-8. `b64u` is base64url without padding.
 
 ## 1. Shared secret
 
-| Mode | How the secret `S` (32 bytes) is established |
-|---|---|
+| Mode                | How the secret `S` (32 bytes) is established                  |
+| ------------------- | ------------------------------------------------------------- |
 | Link (phase 3, MVP) | Sender: `S = random(32)`. Link: `https://<app>/#v1.<b64u(S)>` |
-| Code (phase 5) | Code `N-word-word`. Both sides run CPace (see §6); `S = ISK` |
+| Code (phase 5)      | Code `N-word-word`. Both sides run CPace (see §6); `S = ISK`  |
 
 The fragment is read by the page script and then removed from the address bar with `history.replaceState`.
 
@@ -36,14 +36,14 @@ envelope   = iv(12, random) ‖ AES-GCM(signalKey, iv, plaintext, aad = "sig/v1"
 plaintext  = JSON { "from": b64u(8 random bytes, per tab), "seq": n, "ts": unix_ms, "t": type, "d": data }
 ```
 
-| `t` | Sender of message | `d` |
-|---|---|---|
-| `join` | receiver | `{}` |
-| `offer` | sender | `{ sdp }` |
-| `answer` | receiver | `{ sdp }` |
-| `ice` | both | `{ candidate }` (trickle; omitted in manual mode) |
-| `bye` | both | `{ reason? }` |
-| `pake` | both (phase 5) | `{ msg }` |
+| `t`      | Sender of message | `d`                                               |
+| -------- | ----------------- | ------------------------------------------------- |
+| `join`   | receiver          | `{}`                                              |
+| `offer`  | sender            | `{ sdp }`                                         |
+| `answer` | receiver          | `{ sdp }`                                         |
+| `ice`    | both              | `{ candidate }` (trickle; omitted in manual mode) |
+| `bye`    | both              | `{ reason? }`                                     |
+| `pake`   | both (phase 5)    | `{ msg }`                                         |
 
 Receivers drop messages that fail to decrypt, come from themselves, repeat a `(from, seq)` pair already seen, or have `|now − ts| > 120 s`.
 Because SDP travels inside this authenticated envelope, the DTLS fingerprints are bound to `S`. Someone without the secret can't
@@ -69,23 +69,23 @@ nonce   = 0x00000000 ‖ counter u64                                    // 96-bi
 frame   = header ‖ AES-GCM(key = keyS2R | keyR2S by direction, nonce, payload, aad = header)
 ```
 
-* Each direction keeps its own counter, starting at 0 and incremented by 1 for every frame.
-* The receiver of a frame requires `counter == expected`. Any mismatch or authentication failure is fatal: send `ERROR` if possible, then close.
-* Maximum frame size is 65 536 bytes.
+- Each direction keeps its own counter, starting at 0 and incremented by 1 for every frame.
+- The receiver of a frame requires `counter == expected`. Any mismatch or authentication failure is fatal: send `ERROR` if possible, then close.
+- Maximum frame size is 65 536 bytes.
 
 ### 4.3 Frame types
 
-| Type | Name | Dir | Payload |
-|---|---|---|---|
-| 0x02 | MANIFEST | S→R | JSON `{ files: [{ path, size, mime, mtime? }], chunkSize, total }` |
-| 0x03 | ACCEPT | R→S | JSON `{ files: [indices], resume?: { [index]: offset } }` |
-| 0x04 | REJECT | R→S | JSON `{ reason? }` |
-| 0x10 | CHUNK | S→R | `fileIdx u32 ‖ offset u64 ‖ bytes` |
-| 0x11 | FILE_END | S→R | `fileIdx u32 ‖ size u64` |
-| 0x12 | ACK | R→S | `fileIdx u32 ‖ offset u64` (bytes durably written) |
-| 0x20 | DONE | S→R, R→S | empty |
-| 0x7E | CANCEL | both | JSON `{ reason? }` |
-| 0x7F | ERROR | both | JSON `{ code, message? }` |
+| Type | Name     | Dir      | Payload                                                            |
+| ---- | -------- | -------- | ------------------------------------------------------------------ |
+| 0x02 | MANIFEST | S→R      | JSON `{ files: [{ path, size, mime, mtime? }], chunkSize, total }` |
+| 0x03 | ACCEPT   | R→S      | JSON `{ files: [indices], resume?: { [index]: offset } }`          |
+| 0x04 | REJECT   | R→S      | JSON `{ reason? }`                                                 |
+| 0x10 | CHUNK    | S→R      | `fileIdx u32 ‖ offset u64 ‖ bytes`                                 |
+| 0x11 | FILE_END | S→R      | `fileIdx u32 ‖ size u64`                                           |
+| 0x12 | ACK      | R→S      | `fileIdx u32 ‖ offset u64` (bytes durably written)                 |
+| 0x20 | DONE     | S→R, R→S | empty                                                              |
+| 0x7E | CANCEL   | both     | JSON `{ reason? }`                                                 |
+| 0x7F | ERROR    | both     | JSON `{ code, message? }`                                          |
 
 `path` uses `/` separators and is relative. The receiver must reject absolute paths, `..` segments, empty segments,
 and control characters before calling any sink.
@@ -119,13 +119,13 @@ continues from those offsets.
 
 ## 5. Limits and defaults
 
-| Parameter | Default |
-|---|---|
-| chunkSize (plaintext) | 61 440 (60 KiB) |
-| bufferedAmount high / low | 4 MiB / 1 MiB |
-| ACK interval | 1 MiB |
-| Signaling message max age | 120 s |
-| Max files per manifest | 10 000 |
+| Parameter                 | Default         |
+| ------------------------- | --------------- |
+| chunkSize (plaintext)     | 61 440 (60 KiB) |
+| bufferedAmount high / low | 4 MiB / 1 MiB   |
+| ACK interval              | 1 MiB           |
+| Signaling message max age | 120 s           |
+| Max files per manifest    | 10 000          |
 
 ## 6. Short codes with CPace (phase 5, draft)
 

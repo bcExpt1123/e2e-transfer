@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits"],
+  "schedule": ["before 6am on monday"],
+  "rangeStrategy": "pin",
+  "packageRules": [
+    {
+      "groupName": "devtools",
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true,
+      "matchUpdateTypes": ["minor", "patch"]
+    },
+    {
+      "description": "Crypto / transport deps always need a human review",
+      "matchPackageNames": ["@noble/**", "nostr-tools", "mqtt"],
+      "automerge": false,
+      "labels": ["security-review"]
+    }
+  ]
+}

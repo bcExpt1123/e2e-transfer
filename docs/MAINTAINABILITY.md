@@ -10,13 +10,14 @@ apps/web/src
 ├── lib/state/           TransferController (*.svelte.ts): the ONLY bridge from core to UI
 ├── lib/ui/              design system: tokens.css, Button, Card, Progress, Dialog, FileList…
 ├── lib/errors.ts        ErrorCode → message + action (see UX.md)
-└── lib/i18n/            Paraglide messages
+└── lib/i18n/            typed message catalogs (en.ts, …)
 packages/core            pure TS; no Svelte, no DOM except injected WebRTC/WebCrypto
 packages/signaling       Signaling adapters; depend only on core's types
 packages/storage         FileSink adapters; depend only on core's types
 ```
 
 Rules, checked in CI by `dependency-cruiser`:
+
 1. `core` must not import from `apps/*`, Svelte, or concrete adapters.
 2. Adapters must not import each other.
 3. `features/*` must not import each other. Shared code lives in `lib/`.
@@ -24,24 +25,27 @@ Rules, checked in CI by `dependency-cruiser`:
 5. Each package exposes its public API only through `src/index.ts`. Deep imports are lint errors.
 
 ## Code conventions
+
 - TypeScript `strict`, `noUncheckedIndexedAccess`, and no `any`. Use `unknown` and narrow it.
 - Errors: core throws or emits `TransferError { code: ErrorCode }`. No string matching on messages.
 - Events: core exposes a small typed emitter (`session.on('progress', …)`). The UI never polls.
 - Constants (chunk size, thresholds, timeouts) live in `core/src/config.ts` and are overridable per session.
 - Keep files short, under about 300 lines, with one concept each. Name them after what they do (`frame-codec.ts`, not `utils.ts`).
-- Comments explain *why*. Protocol code links to the relevant section of [PROTOCOL.md](PROTOCOL.md).
+- Comments explain _why_. Protocol code links to the relevant section of [PROTOCOL.md](PROTOCOL.md).
 
 ## Extension points (how the app grows without rewrites)
-| To add… | Do this | No changes in |
-|---|---|---|
-| A signaling network | Implement `Signaling` and pass the contract test suite | core, UI |
-| A storage target | Implement `FileSink` and pass the contract test suite | core, UI |
-| A key-exchange mode | Implement `KeyExchange` (link, cpace…) that yields `S` | transport, storage |
-| A protocol feature | New frame type or MANIFEST field behind a version or capability flag in HELLO | older clients keep working |
-| A language | Add `messages/<lang>.json` | code |
-| A screen | Add a folder under `features/` | other features |
+
+| To add…             | Do this                                                                        | No changes in              |
+| ------------------- | ------------------------------------------------------------------------------ | -------------------------- |
+| A signaling network | Implement `Signaling` and pass the contract test suite                         | core, UI                   |
+| A storage target    | Implement `FileSink` and pass the contract test suite                          | core, UI                   |
+| A key-exchange mode | Implement `KeyExchange` (link, cpace…) that yields `S`                         | transport, storage         |
+| A protocol feature  | New frame type or MANIFEST field behind a version or capability flag in HELLO  | older clients keep working |
+| A language          | Add `lib/i18n/<lang>.ts` typed as `Messages`, register it in `index.svelte.ts` | code                       |
+| A screen            | Add a folder under `features/`                                                 | other features             |
 
 ## Testing pyramid
+
 - **Unit (Vitest):** most tests, mainly in `core`. Coverage gate: core ≥ 90% lines, adapters ≥ 80%.
 - **Contract suites:** `packages/signaling/test/contract.ts` and `packages/storage/test/contract.ts`. Every adapter runs them.
 - **Component (Vitest + @testing-library/svelte):** design-system components and feature states.
@@ -49,6 +53,7 @@ Rules, checked in CI by `dependency-cruiser`:
 - A bug fix comes with a test that fails without the fix.
 
 ## Tooling and workflow
+
 - `pnpm` workspaces with a pinned Node version (`.nvmrc`) and `packageManager` field.
 - Biome for lint and format, run as a pre-commit hook via `lefthook`.
 - Conventional Commits, with `release-please` for changelog and version tags.
@@ -57,6 +62,7 @@ Rules, checked in CI by `dependency-cruiser`:
 - Architecture decisions are written as ADRs in [adr/](adr/). Copy the newest one as a template.
 
 ## Definition of done (every PR)
+
 - [ ] Tests added or updated, CI green
 - [ ] No new budget violations (bundle size, a11y)
 - [ ] New UI text goes through i18n, and new errors are in the error catalog

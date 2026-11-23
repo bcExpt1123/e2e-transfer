@@ -3,6 +3,7 @@
 ## Goals and non-goals
 
 **Goals**
+
 - Move files of any size between two browsers, directly and end-to-end encrypted.
 - Operate no backend. The deployable output is a static `dist/` folder.
 - Keep the core framework-agnostic and the external dependencies (signaling, storage, key exchange) swappable
@@ -10,6 +11,7 @@
 - Provide a polished, accessible UI ([UX.md](UX.md)) on a codebase that is cheap to change ([MAINTAINABILITY.md](MAINTAINABILITY.md)).
 
 **Non-goals (for now)**
+
 - Store-and-forward or offline delivery. Both peers must be online at the same time.
 - Native apps or a CLI. The protocol is documented so that they could be built later.
 - Guaranteed connectivity behind symmetric NATs without a TURN server. See [NAT traversal](#nat-traversal).
@@ -48,15 +50,15 @@ idle ─► joining ─► signaling ─► connecting ─► handshaking ─►
                        └─────────────┴──────────────┴─────────────────┴──────► failed / cancelled
 ```
 
-| State | Sender | Receiver |
-|---|---|---|
-| joining | create secret, join `roomTopic`, show link | parse `#secret`, join `roomTopic`, send `join` |
-| signaling | on `join`: create offer | wait for offer, reply with answer |
-| connecting | ICE / DTLS | ICE / DTLS |
-| handshaking | exchange `HELLO` nonces → derive session keys | same |
-| awaiting-accept | send `MANIFEST` | user accepts → `ACCEPT` (picks sink) |
-| transferring | stream `CHUNK`s | write to sink, send `ACK`s |
-| done | `DONE` received | all files closed |
+| State           | Sender                                        | Receiver                                       |
+| --------------- | --------------------------------------------- | ---------------------------------------------- |
+| joining         | create secret, join `roomTopic`, show link    | parse `#secret`, join `roomTopic`, send `join` |
+| signaling       | on `join`: create offer                       | wait for offer, reply with answer              |
+| connecting      | ICE / DTLS                                    | ICE / DTLS                                     |
+| handshaking     | exchange `HELLO` nonces → derive session keys | same                                           |
+| awaiting-accept | send `MANIFEST`                               | user accepts → `ACCEPT` (picks sink)           |
+| transferring    | stream `CHUNK`s                               | write to sink, send `ACK`s                     |
+| done            | `DONE` received                               | all files closed                               |
 
 Roles are fixed: **the sender always makes the offer**. That avoids glare handling ("perfect negotiation")
 in v1. When the link is opened, the sender's UI asks for confirmation before sending `MANIFEST`, so a leaked link can't silently receive the file.
@@ -64,12 +66,12 @@ in v1. When the link is opened, the sender's UI asks for confirmation before sen
 ## Adapter interfaces
 
 ```ts
-// packages/signaling
+// packages/core/src/ports/signaling.ts (implemented in packages/signaling)
 export interface Signaling {
   join(topic: string): Promise<SignalingRoom>;
 }
 export interface SignalingRoom {
-  send(payload: Uint8Array): Promise<void>;          // already encrypted by core
+  send(payload: Uint8Array): Promise<void>; // already encrypted by core
   onMessage(cb: (payload: Uint8Array) => void): () => void;
   leave(): Promise<void>;
 }
@@ -78,14 +80,14 @@ export interface SignalingRoom {
 Adapters only move opaque bytes. All encryption, authentication, replay filtering and deduplication happen in `core`
 (see [PROTOCOL.md § Signaling envelope](PROTOCOL.md#3-signaling-envelope)), so a new adapter can't weaken security.
 
-| Adapter | Transport | Notes |
-|---|---|---|
-| `nostr` (default) | Ephemeral events (kind 20000–29999) on 3+ public relays, signed by a throwaway key | Redundant: publishes to all relays and dedupes on receipt |
-| `mqtt` | `mqtt` over WSS to public brokers, topic `e2e-transfer/v1/<topic>` | Fallback when Nostr relays are blocked |
-| `manual` | User copies text or scans a QR code each way | Fully serverless. Uses non-trickle ICE, so the complete SDP is gathered first. Compressed and base64url-encoded |
+| Adapter           | Transport                                                                          | Notes                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `nostr` (default) | Ephemeral events (kind 20000–29999) on 3+ public relays, signed by a throwaway key | Redundant: publishes to all relays and dedupes on receipt                                                       |
+| `mqtt`            | `mqtt` over WSS to public brokers, topic `e2e-transfer/v1/<topic>`                 | Fallback when Nostr relays are blocked                                                                          |
+| `manual`          | User copies text or scans a QR code each way                                       | Fully serverless. Uses non-trickle ICE, so the complete SDP is gathered first. Compressed and base64url-encoded |
 
 ```ts
-// packages/storage
+// packages/core/src/ports/storage.ts (implemented in packages/storage)
 export interface FileSink {
   /** Called once per file, after the user accepts. */
   open(meta: { path: string; size: number; mime: string }): Promise<SinkWriter>;
@@ -97,11 +99,11 @@ export interface SinkWriter {
 }
 ```
 
-| Sink | Where | Memory | Browsers |
-|---|---|---|---|
-| `fs-access` | `showSaveFilePicker` / `showDirectoryPicker` | constant | Chromium |
-| `opfs` | Origin Private File System, then download of the disk-backed `File` | constant | all modern browsers |
-| `memory` | `Blob` assembled in RAM | O(file) | everything; tests and small files (< 256 MiB) |
+| Sink        | Where                                                               | Memory   | Browsers                                      |
+| ----------- | ------------------------------------------------------------------- | -------- | --------------------------------------------- |
+| `fs-access` | `showSaveFilePicker` / `showDirectoryPicker`                        | constant | Chromium                                      |
+| `opfs`      | Origin Private File System, then download of the disk-backed `File` | constant | all modern browsers                           |
+| `memory`    | `Blob` assembled in RAM                                             | O(file)  | everything; tests and small files (< 256 MiB) |
 
 The web app picks the best available sink at runtime.
 
@@ -128,20 +130,22 @@ File.slice() ─► encrypt (WebCrypto, async) ─► dc.send()
 
 ## Why this scales
 
-| Load | Cost to us |
-|---|---|
-| Static assets | CDN, cacheable, effectively free |
-| Signaling | A few KB per session on public relays. Spread across many relays and swappable |
-| File bytes | Peer to peer: zero |
-| TURN (optional) | Only for the minority who need it. Can be metered per deployment |
+| Load            | Cost to us                                                                     |
+| --------------- | ------------------------------------------------------------------------------ |
+| Static assets   | CDN, cacheable, effectively free                                               |
+| Signaling       | A few KB per session on public relays. Spread across many relays and swappable |
+| File bytes      | Peer to peer: zero                                                             |
+| TURN (optional) | Only for the minority who need it. Can be metered per deployment               |
 
 Each part that does hold state (relays, TURN) is an interchangeable adapter, so no single component limits growth.
 To keep public relays from becoming a bottleneck:
+
 - Publish to several relays at once and track per-relay health (latency, failures) in `localStorage`. Unhealthy relays are skipped.
 - The relay list ships in config and can be overridden per deployment (`VITE_SIGNALING_RELAYS`) or per user in Settings.
 - If the default adapter fails, fall back automatically: nostr → mqtt → manual QR.
 
 ### Scaling the codebase
+
 - **Ports and adapters:** new networks, storage targets and key-exchange modes are new adapters. Nothing in core changes. See the
   extension-point table in [MAINTAINABILITY.md](MAINTAINABILITY.md#extension-points-how-the-app-grows-without-rewrites).
 - **Versioned protocol:** HELLO carries the version, and future capability flags are negotiated, so old and new clients interoperate.

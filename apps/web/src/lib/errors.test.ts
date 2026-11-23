@@ -1,0 +1,20 @@
+import { ErrorCode } from '@e2e-transfer/core';
+import { describe, expect, it } from 'vitest';
+import { describeError, ERROR_ACTIONS } from './errors.ts';
+import { en } from './i18n/en.ts';
+
+describe('error catalog', () => {
+  const codes = Object.values(ErrorCode);
+
+  it.each(codes)('%s has a message and at least one action', (code) => {
+    const view = describeError(code, en);
+    expect(view.message.length).toBeGreaterThan(0);
+    expect(view.actions.length).toBeGreaterThan(0);
+    for (const a of view.actions) expect(a.label.length).toBeGreaterThan(0);
+  });
+
+  it('covers exactly the core error codes', () => {
+    expect(Object.keys(ERROR_ACTIONS).sort()).toEqual([...codes].sort());
+    expect(Object.keys(en.errors).sort()).toEqual([...codes].sort());
+  });
+});

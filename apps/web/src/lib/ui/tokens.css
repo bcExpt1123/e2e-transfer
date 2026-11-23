@@ -1,0 +1,78 @@
+/*
+ * Design tokens — the single source of truth for the look (docs/UX.md § Visual design).
+ * Components use them through Tailwind utilities mapped in app.css (`bg-surface`, `text-muted`, …).
+ */
+:root {
+  color-scheme: light;
+  --ds-bg: #f7f7f8;
+  --ds-surface: #ffffff;
+  --ds-surface-2: #eeeef2;
+  --ds-border: #dcdce3;
+  --ds-text: #17171c;
+  --ds-muted: #5b5b66;
+  --ds-accent: #4338ca;
+  --ds-accent-hover: #3730a3;
+  --ds-accent-fg: #ffffff;
+  --ds-accent-soft: #e0e7ff;
+  --ds-success: #15803d;
+  --ds-danger: #b91c1c;
+  --ds-focus: #4338ca;
+  --ds-overlay: rgb(15 15 19 / 0.45);
+
+  --ds-radius-sm: 0.5rem;
+  --ds-radius-md: 0.75rem;
+  --ds-radius-lg: 1rem;
+  --ds-shadow-md: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.06);
+  --ds-shadow-lg: 0 8px 40px rgb(0 0 0 / 0.18);
+  --ds-duration-fast: 150ms;
+  --ds-duration-base: 220ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ds-bg: #0f0f13;
+    --ds-surface: #18181f;
+    --ds-surface-2: #23232c;
+    --ds-border: #31313c;
+    --ds-text: #ededf2;
+    --ds-muted: #a3a3b0;
+    --ds-accent: #a5b4fc;
+    --ds-accent-hover: #c7d2fe;
+    --ds-accent-fg: #11113a;
+    --ds-accent-soft: #23234a;
+    --ds-success: #4ade80;
+    --ds-danger: #f87171;
+    --ds-focus: #a5b4fc;
+    --ds-overlay: rgb(0 0 0 / 0.6);
+    --ds-shadow-md: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 16px rgb(0 0 0 / 0.3);
+    --ds-shadow-lg: 0 8px 40px rgb(0 0 0 / 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ds-bg: #0f0f13;
+  --ds-surface: #18181f;
+  --ds-surface-2: #23232c;
+  --ds-border: #31313c;
+  --ds-text: #ededf2;
+  --ds-muted: #a3a3b0;
+  --ds-accent: #a5b4fc;
+  --ds-accent-hover: #c7d2fe;
+  --ds-accent-fg: #11113a;
+  --ds-accent-soft: #23234a;
+  --ds-success: #4ade80;
+  --ds-danger: #f87171;
+  --ds-focus: #a5b4fc;
+  --ds-overlay: rgb(0 0 0 / 0.6);
+  --ds-shadow-md: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 16px rgb(0 0 0 / 0.3);
+  --ds-shadow-lg: 0 8px 40px rgb(0 0 0 / 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ds-duration-fast: 0ms;
+    --ds-duration-base: 0ms;
+  }
+}

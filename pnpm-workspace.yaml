@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Hooks are installed by our own `prepare` script; lefthook's postinstall is not needed.
+allowBuilds:
+  lefthook: false
