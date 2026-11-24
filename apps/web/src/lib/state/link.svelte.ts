@@ -4,7 +4,7 @@
  */
 import { type Bytes, isLinkFragment, parseLink } from '@e2e-transfer/core';
 
-export type IncomingStatus = 'none' | 'ready' | 'invalid';
+export type IncomingStatus = 'none' | 'ready' | 'invalid' | 'code';
 
 class IncomingLink {
   status = $state<IncomingStatus>('none');
@@ -38,10 +38,22 @@ class IncomingLink {
     return this.#offer;
   }
 
+  /** The short code the user typed (already validated), if receiving by code. */
+  code = $state<string | null>(null);
+
+  /** Receive with a typed short code instead of a link. */
+  enterCode(code: string): void {
+    this.#secret = undefined;
+    this.#offer = undefined;
+    this.code = code;
+    this.status = 'code';
+  }
+
   /** Forget the link (e.g. "Send files instead"). */
   clear(): void {
     this.#secret = undefined;
     this.#offer = undefined;
+    this.code = null;
     this.status = 'none';
   }
 }

@@ -68,6 +68,8 @@
     else if (id === 'learnMore') appUi.aboutOpen = true;
     else if (id === 'reload') location.reload();
     else if (id === 'askNewLink') sendInstead();
+    else if (ctrl.byCode && ctrl.error === 'CODE_INVALID')
+      sendInstead(); // back to the code field
     else void ctrl.start();
   }
 
@@ -94,7 +96,11 @@
       current={connectStep(ctrl.phase)}
       label={m.receive.connecting}
     />
-    <p class="text-sm text-muted">{statusLine(m, ctrl.phase, 'receiver')}</p>
+    <p class="text-sm text-muted">
+      {ctrl.byCode && (ctrl.phase === 'joining' || ctrl.phase === 'waiting')
+        ? m.receive.checkingCode
+        : statusLine(m, ctrl.phase, 'receiver')}
+    </p>
     {#if ctrl.manual && ctrl.phase === 'waiting'}
       <section class="flex flex-col gap-3 border-t border-border pt-4" aria-labelledby="reply-title">
         <h2 id="reply-title" class="font-semibold">{m.receive.replyTitle}</h2>

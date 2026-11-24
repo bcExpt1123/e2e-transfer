@@ -1,19 +1,24 @@
 /**
  * Send flow state (docs/UX.md: Pick → Share → Approve → Transfer → Done).
- * Wraps core's LinkSender; one link stays valid across retries until reset().
+ * Wraps core's LinkSender (link and manual modes) or CodeSender (short codes).
+ * A link stays valid across retries until reset().
  */
 import {
   type Bytes,
   blobSource,
   browserRtc,
+  type Emitter,
   type ErrorCode,
   encodeLink,
   generateSecret,
   isTransferError,
+  type LinkEvents,
   type LinkPhase,
   LinkSender,
   type RtcFactory,
+  type SenderProgress,
 } from '@e2e-transfer/core';
+import type { CodeSender } from '@e2e-transfer/core/code';
 import { createSignaling, iceServers } from './network.ts';
 import { RateMeter, type RateSnapshot } from './rate.ts';
 
@@ -23,6 +28,8 @@ export interface SendItem {
 }
 
 export type SendPhase = 'idle' | LinkPhase;
+export type ShareMode = 'relay' | 'manual' | 'code';
+export const CODE_MAX_ATTEMPTS = 3;
 
 export interface SendDeps {
   createSignaling: typeof createSignaling;
@@ -52,12 +59,16 @@ export class SendController {
   error = $state<ErrorCode | null>(null);
   fileCount = $state(0);
   /** `manual`: offer inside the link, reply pasted back; no relays involved. */
-  mode = $state<'relay' | 'manual'>('relay');
+  mode = $state<ShareMode>('relay');
+  /** Code mode: the short code to read out, e.g. "7-guitar-ocean". */
+  code = $state<string | null>(null);
+  /** Code mode: wrong codes entered so far for the current code. */
+  wrongCodes = $state(0);
 
   readonly #deps: SendDeps;
   #items: SendItem[] = [];
   #secret: Bytes | undefined;
-  #session: LinkSender | undefined;
+  #session: LinkSender | CodeSender | undefined;
   #confirm: ((ok: boolean) => void) | undefined;
   readonly #meter = new RateMeter();
 
@@ -75,7 +86,7 @@ export class SendController {
   }
 
   /** Create the secret link and start waiting for the receiver. */
-  share(items: SendItem[], mode: 'relay' | 'manual' = 'relay'): void {
+  share(items: SendItem[], mode: ShareMode = 'relay'): void {
     if (items.length === 0) return;
     this.#items = items;
     this.fileCount = items.length;
@@ -84,7 +95,7 @@ export class SendController {
   }
 
   /** Switch the current share between relay and manual mode (a new link either way). */
-  switchMode(mode: 'relay' | 'manual'): void {
+  switchMode(mode: ShareMode): void {
     if (!this.#secret) return;
     this.#secret = generateSecret();
     this.#setMode(mode);
@@ -92,14 +103,16 @@ export class SendController {
 
   /** Manual mode: the reply code pasted from the receiver. False if it doesn't fit. */
   async submitReply(code: string): Promise<boolean> {
-    return (await this.#session?.acceptReply(code)) ?? false;
+    const s = this.#session;
+    return s instanceof LinkSender ? s.acceptReply(code) : false;
   }
 
-  #setMode(mode: 'relay' | 'manual') {
+  #setMode(mode: ShareMode) {
     const secret = this.#secret;
     if (!secret) return;
     this.mode = mode;
-    // In manual mode the link needs the offer, which takes a moment to prepare.
+    this.code = null;
+    // In manual mode the link needs the offer, which takes a moment to prepare; code mode has no link.
     this.link = mode === 'relay' ? encodeLink(this.#deps.baseUrl(), secret) : null;
     this.#attempt();
   }
@@ -130,6 +143,8 @@ export class SendController {
     this.#items = [];
     this.link = null;
     this.mode = 'relay';
+    this.code = null;
+    this.wrongCodes = 0;
     this.phase = 'idle';
     this.error = null;
     this.confirming = false;
@@ -156,38 +171,49 @@ export class SendController {
     if (this.mode === 'manual') this.link = null;
 
     let declinedByUs = false;
-    let session: LinkSender;
+    let session: LinkSender | CodeSender;
     try {
-      session = new LinkSender({
-        secret,
-        signaling: await this.#deps.createSignaling(),
-        rtc: this.#deps.rtc,
-        iceServers: iceServers(),
-        files: this.#items.map((i) => blobSource(i.file, i.path)),
-        manual: this.mode === 'manual',
-        confirmPeer: (peer) =>
-          new Promise<boolean>((resolve) => {
-            this.peer = peer;
-            this.confirming = true;
-            this.#confirm = (ok) => {
-              declinedByUs = !ok;
-              resolve(ok);
-            };
-          }),
-      });
+      session =
+        this.mode === 'code'
+          ? await this.#codeSender()
+          : new LinkSender({
+              secret,
+              signaling: await this.#deps.createSignaling(),
+              rtc: this.#deps.rtc,
+              iceServers: iceServers(),
+              files: this.#items.map((i) => blobSource(i.file, i.path)),
+              manual: this.mode === 'manual',
+              confirmPeer: (peer) =>
+                new Promise<boolean>((resolve) => {
+                  this.peer = peer;
+                  this.confirming = true;
+                  this.#confirm = (ok) => {
+                    declinedByUs = !ok;
+                    resolve(ok);
+                  };
+                }),
+            });
     } catch (err) {
       this.#fail(err);
       return;
     }
     if (secret !== this.#secret) return; // reset while loading the signaling adapter
     this.#session = session;
-    session.on('phase', (p) => {
+    // Both session kinds emit the link events; CodeSender adds `wrongCode`.
+    const events: Pick<Emitter<LinkEvents<SenderProgress>>, 'on'> = session;
+    events.on('phase', (p) => {
       if (this.#session === session) this.phase = p;
     });
-    session.on('code', (offer) => {
-      if (this.#session === session) this.link = encodeLink(this.#deps.baseUrl(), secret, offer);
-    });
-    session.on('progress', ({ acked, total }) => {
+    if (session instanceof LinkSender) {
+      session.on('code', (offer) => {
+        if (this.#session === session) this.link = encodeLink(this.#deps.baseUrl(), secret, offer);
+      });
+    } else {
+      session.on('wrongCode', (n) => {
+        if (this.#session === session) this.wrongCodes = n;
+      });
+    }
+    events.on('progress', ({ acked, total }) => {
       if (this.#session !== session) return;
       this.done = acked;
       this.total = total;
@@ -207,6 +233,25 @@ export class SendController {
     } finally {
       if (this.#session === session) this.confirming = false;
     }
+  }
+
+  /** Short-code mode: a fresh code per attempt (a closed code must never be reused). */
+  async #codeSender(): Promise<CodeSender> {
+    const [{ CodeSender, generateCode, formatCode }, signaling] = await Promise.all([
+      import('@e2e-transfer/core/code'),
+      this.#deps.createSignaling(),
+    ]);
+    const code = generateCode();
+    this.code = formatCode(code);
+    this.wrongCodes = 0;
+    return new CodeSender({
+      code,
+      signaling,
+      rtc: this.#deps.rtc,
+      iceServers: iceServers(),
+      files: this.#items.map((i) => blobSource(i.file, i.path)),
+      maxAttempts: CODE_MAX_ATTEMPTS,
+    });
   }
 
   #fail(err: unknown) {

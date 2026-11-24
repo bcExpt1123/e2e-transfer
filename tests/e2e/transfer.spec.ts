@@ -175,4 +175,41 @@ test.describe('transfer between two browsers', () => {
     await a.close();
     await b.close();
   });
+
+  test('sends with a short code; a wrong guess is refused and reported', async ({ context }) => {
+    const sender = await context.newPage();
+    const payload = randomBytes(200_000);
+    await sender.goto('./');
+    await sender
+      .getByTestId('file-input')
+      .setInputFiles([{ name: 'code.bin', mimeType: 'application/octet-stream', buffer: payload }]);
+    await sender.getByRole('button', { name: 'Create link' }).click();
+    await sender.getByRole('button', { name: 'Use a short code instead' }).click();
+    const code = (await sender.getByTestId('short-code').textContent())?.trim() ?? '';
+    expect(code).toMatch(/^\d{1,3}-[a-z]+-[a-z]+$/);
+    const [n, w1, w2] = code.split('-') as [string, string, string];
+
+    // A guesser with the right number but a wrong word
+    const guesser = await context.newPage();
+    await guesser.goto('./');
+    const wrong = w2 === 'zoo' ? 'zone' : 'zoo';
+    await guesser.getByRole('combobox', { name: 'Code from the sender' }).fill(`${n}-${w1}-${wrong}`);
+    await guesser.getByRole('button', { name: 'Receive' }).click();
+    await expect(guesser.getByRole('alert')).toContainText('That code didn’t work');
+    await expect(sender.getByRole('alert')).toContainText('Someone entered a wrong code (1 of 3 tries)');
+
+    // The real receiver types it loosely, with 4-letter prefixes
+    const receiver = await context.newPage();
+    await receiver.goto('./');
+    await receiver
+      .getByRole('combobox', { name: 'Code from the sender' })
+      .fill(` ${n} ${w1.slice(0, 4).toUpperCase()} ${w2.slice(0, 4)} `);
+    await receiver.getByRole('button', { name: 'Receive' }).click();
+    await expect(receiver.getByRole('heading', { name: 'Incoming files' })).toBeVisible({ timeout: 15_000 });
+    const downloading = receiver.waitForEvent('download');
+    await receiver.getByRole('button', { name: 'Accept & download' }).click();
+    const download = await downloading;
+    expect(sha256(await readFile((await download.path()) ?? ''))).toBe(sha256(payload));
+    await expect(sender.getByRole('heading', { name: 'Delivered' })).toBeVisible();
+  });
 });

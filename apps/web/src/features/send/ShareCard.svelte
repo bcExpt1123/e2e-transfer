@@ -13,13 +13,28 @@
     link: string | null;
     phase: string;
     summary: string;
-    mode: 'relay' | 'manual';
+    mode: 'relay' | 'manual' | 'code';
+    /** Code mode: the short code and how many wrong guesses were made. */
+    code?: string | null;
+    wrongCodes?: number;
+    maxCodeAttempts?: number;
     onstop: () => void;
-    onswitch: (mode: 'relay' | 'manual') => void;
+    onswitch: (mode: 'relay' | 'manual' | 'code') => void;
     onreply: (code: string) => Promise<boolean>;
   }
 
-  let { link, phase, summary, mode, onstop, onswitch, onreply }: Props = $props();
+  let {
+    link,
+    phase,
+    summary,
+    mode,
+    code = null,
+    wrongCodes = 0,
+    maxCodeAttempts = 3,
+    onstop,
+    onswitch,
+    onreply,
+  }: Props = $props();
 
   const m = $derived(i18n.m);
   const canShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
@@ -48,14 +63,38 @@
 
 <Card class="flex flex-col gap-5">
   <div>
-    <h2 class="text-xl font-semibold">{mode === 'manual' ? m.share.manualTitle : m.share.title}</h2>
+    <h2 class="text-xl font-semibold">
+      {mode === 'manual' ? m.share.manualTitle : mode === 'code' ? m.share.codeTitle : m.share.title}
+    </h2>
     <p class="mt-1 text-sm text-muted">{summary}</p>
     {#if mode === 'manual'}
       <p class="mt-2 text-sm">{m.share.manualSteps}</p>
     {/if}
   </div>
 
-  {#if link}
+  {#if mode === 'code'}
+    {#if code}
+      <p
+        class="rounded-md bg-surface-2 px-4 py-5 text-center font-mono text-2xl font-semibold tracking-wide break-words sm:text-3xl"
+        data-testid="short-code"
+      >
+        {code}
+      </p>
+      <CopyField
+        value={code}
+        label={m.share.codeLabel}
+        copyLabel={m.share.copy}
+        copiedLabel={m.share.copied}
+        oncopy={(ok) => !ok && toast.error(m.share.copyFailed)}
+      />
+      <p class="text-sm text-muted">{m.share.codeHint}</p>
+      {#if wrongCodes > 0}
+        <p class="text-sm font-medium text-danger" role="alert">{m.share.wrongCode(wrongCodes, maxCodeAttempts)}</p>
+      {/if}
+    {:else}
+      <p class="text-sm text-muted" role="status">{m.share.preparing}</p>
+    {/if}
+  {:else if link}
     <CopyField
       value={link}
       label={m.share.linkLabel}
@@ -131,10 +170,12 @@
     </form>
   {/if}
 
-  <p class="flex gap-2 rounded-md bg-surface-2 p-3 text-sm text-muted">
-    <TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-    {m.share.warning}
-  </p>
+  {#if mode !== 'code'}
+    <p class="flex gap-2 rounded-md bg-surface-2 p-3 text-sm text-muted">
+      <TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      {m.share.warning}
+    </p>
+  {/if}
 
   <div class="flex flex-col gap-2">
     <StatusStepper
@@ -147,8 +188,13 @@
 
   <div class="flex flex-wrap gap-2">
     <Button variant="ghost" onclick={onstop}>{m.share.stop}</Button>
-    <Button variant="ghost" onclick={() => onswitch(mode === 'relay' ? 'manual' : 'relay')}>
-      {mode === 'relay' ? m.share.toManual : m.share.toRelay}
-    </Button>
+    {#if mode === 'relay'}
+      <Button variant="ghost" onclick={() => onswitch('code')}>{m.share.toCode}</Button>
+      <Button variant="ghost" onclick={() => onswitch('manual')}>{m.share.toManual}</Button>
+    {:else}
+      <Button variant="ghost" onclick={() => onswitch('relay')}>
+        {mode === 'code' ? m.share.toLink : m.share.toRelay}
+      </Button>
+    {/if}
   </div>
 </Card>

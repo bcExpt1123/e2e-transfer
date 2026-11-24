@@ -26,6 +26,9 @@ File contents, file names and sizes, and who is talking to whom.
    words that match the receiver's screen only within that session. The device hint ("Firefox on Android") is
    self-reported and only a convenience.
 
+6. **Short codes**: CPace gives an attacker one online guess per attempt and nothing to test offline. Each code
+   allows 3 attempts, which the sender sees, and is then closed. The probability of success is ≈ 7 · 10⁻⁷ per code.
+
 ## Explicit non-guarantees
 
 - **The link is a bearer credential.** Leaking it (chat history, screenshots, link previews that fetch only the

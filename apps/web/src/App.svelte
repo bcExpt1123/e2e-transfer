@@ -1,7 +1,9 @@
 <script lang="ts">
   import CircleHelp from '@lucide/svelte/icons/circle-help';
   import Settings from '@lucide/svelte/icons/settings';
+  import { untrack } from 'svelte';
   import { Toaster } from 'svelte-sonner';
+  import CodeEntry from './features/receive/CodeEntry.svelte';
   import ReceiveView from './features/receive/ReceiveView.svelte';
   import SendView from './features/send/SendView.svelte';
   import { i18n } from './lib/i18n/index.svelte.ts';
@@ -31,6 +33,13 @@
       receive = new ReceiveController();
     }
   }
+
+  // Back on the home screen: have a fresh controller ready for the next receive (link or code).
+  // Done here rather than when a receive starts, because ReceiveView starts its controller on mount.
+  $effect(() => {
+    if (incoming.status === 'none' && untrack(() => receive.phase) !== 'idle')
+      receive = new ReceiveController();
+  });
 
   const toasterTheme = $derived(theme.pref);
 
@@ -100,6 +109,9 @@
         <h1 class="sr-only">{m.appName}</h1>
       {/if}
       <SendView ctrl={send} />
+      {#if send.phase === 'idle'}
+        <div class="mt-8 border-t border-border pt-6"><CodeEntry /></div>
+      {/if}
     {:else}
       {#key receive}
         <ReceiveView ctrl={receive} />

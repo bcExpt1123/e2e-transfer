@@ -180,11 +180,30 @@ continues from those offsets.
 | ICE gathering (manual)    | 3 s (maximum)   |
 | Max files per manifest    | 10 000          |
 
-## 6. Short codes with CPace (phase 5, draft)
+## 6. Short codes with CPace (phase 5)
 
-- Code: `N-w1-w2`. `N` is 1–999, and the words come from a 2048-word list (about 22 bits of password entropy).
-- Nameplate topic: `hex(HKDF(salt="e2e-transfer/v1/nameplate", IKM=N, "room", 16))`. Collisions with strangers are expected; a peer with a different code simply fails the PAKE.
-- CPace (draft-irtf-cfrg-cpace) over ristretto255, with `PRS = code` and `CI = "e2e-transfer/v1"`. Messages travel as `pake` signaling
-  messages. Because this happens before `S` is known, these messages use an unauthenticated envelope.
-- `S = ISK`, after which everything else proceeds as in link mode. The `signalKey` derived from `S` protects the offer and answer.
-- An attacker gets **one online guess per session**, and failed attempts are visible to the user.
+- **Code:** `N-w1-w2`. `N` is 1–999 and is public. The two words come from the BIP-39 English list (2048 words), so
+  the password has 22 bits of entropy. Every word is unique in its first four letters, so input like `7 guit ocea`
+  is accepted. Input is case-insensitive, and spaces, dashes, dots and commas all work as separators.
+- **Nameplate:** `topic = hex(HKDF(salt="e2e-transfer/v1/nameplate", IKM=utf8(N), "room", 16))`, and the envelope
+  key is `HKDF(…, "signal", 32)`. That key only obfuscates, because `N` is public. Messages use the normal §3
+  envelope with type `pake`. Collisions with strangers are expected: a peer with a different code fails the
+  key confirmation.
+- **PAKE:** CPace per draft-irtf-cfrg-cpace-21, ristretto255 + SHA-512, initiator-responder mode with A = sender
+  and B = receiver. `PRS = utf8("N-w1-w2")` in canonical form, `CI = "e2e-transfer/v1"`, `sid = ""` (freshness comes
+  from Ya/Yb in the transcript), `ADa = "sender"`, `ADb = "receiver"`. The implementation is checked against the
+  draft's §B.3 test vectors.
+- **Messages:**
+
+  ```
+  R → *  pake {Y: b64u(Yb)}                       repeated every 2 s until answered (30 s timeout)
+  S → R  pake {Y: b64u(Ya), tag: b64u(tagS)}
+  R → S  pake {tag: b64u(tagR)}                   sent even when tagS fails, so the sender learns at once
+  tagS = HMAC-SHA256(ISK, "e2e-transfer/v1/confirm/sender"), tagR likewise with "receiver"
+  ```
+
+- **Result:** `S = ISK[0..32]`. Both sides then leave the nameplate and continue exactly as in link mode on
+  `roomTopic(S)`. There's no Approve step: knowing the code already identifies the receiver.
+- **Online guessing:** each attempt costs an attacker one guess (CPace). The sender counts a wrong or missing
+  confirmation, or an identity share, as a failed attempt and shows it. After 3 failures the code is closed
+  (`CODE_ATTEMPTS`), and a new code means new words. The chance of guessing one code is about 3 / 4 194 304.

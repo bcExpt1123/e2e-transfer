@@ -19,6 +19,8 @@ export const ERROR_ACTIONS: Readonly<Record<ErrorCode, readonly ErrorAction[]>> 
   [ErrorCode.StorageQuota]: ['chooseFolder'],
   [ErrorCode.Cancelled]: ['startOver'],
   [ErrorCode.VersionMismatch]: ['reload'],
+  [ErrorCode.CodeInvalid]: ['tryAgain'],
+  [ErrorCode.CodeAttempts]: ['newCode'],
 };
 
 export interface ErrorView {

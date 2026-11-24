@@ -31,10 +31,21 @@
       "gzip": true
     },
     {
-      "name": "lazy chunks (signaling, QR, dialogs)",
+      "name": "lazy: signaling, QR, dialogs",
       "path": [
         "apps/web/dist/assets/*.js",
-        "!apps/web/dist/assets/index-*.js"
+        "!apps/web/dist/assets/index-*.js",
+        "!apps/web/dist/assets/code-*.js",
+        "!apps/web/dist/assets/curve-*.js"
+      ],
+      "limit": "30 KB",
+      "gzip": true
+    },
+    {
+      "name": "lazy: short-code mode (CPace + word list)",
+      "path": [
+        "apps/web/dist/assets/code-*.js",
+        "apps/web/dist/assets/curve-*.js"
       ],
       "limit": "30 KB",
       "gzip": true

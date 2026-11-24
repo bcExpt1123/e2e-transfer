@@ -13,6 +13,10 @@ export const ErrorCode = {
   StorageQuota: 'STORAGE_QUOTA',
   Cancelled: 'CANCELLED',
   VersionMismatch: 'VERSION_MISMATCH',
+  /** Receiver: the short code didn't match the sender's. */
+  CodeInvalid: 'CODE_INVALID',
+  /** Sender: too many wrong codes were tried; a new code is needed. */
+  CodeAttempts: 'CODE_ATTEMPTS',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

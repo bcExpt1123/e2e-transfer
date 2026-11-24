@@ -4,7 +4,7 @@
 
 Open the app and drop in a file. Share the link (or, later, a short code like `7-guitar-orbit`). The bytes go directly from one browser to the other over WebRTC, encrypted with a key that never leaves the two devices.
 
-> Status: **phase 4**. Link-based transfers work end to end over WebRTC, with Nostr + MQTT signaling and a manual (QR / paste) mode that needs no relay at all. See the [roadmap](docs/ROADMAP.md).
+> Status: **phase 5**. Transfers work end to end over WebRTC with a secret link, a short code (`7-guitar-ocean`, CPace PAKE) or a manual QR / paste exchange that needs no relay at all. See the [roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -41,7 +41,7 @@ Open the app and drop in a file. Share the link (or, later, a short code like `7
 | Multiple files and folders, progress, speed, ETA, cancel | 3–4     |
 | Multi-GB files streamed to disk (no RAM limit)           | 3 (MVP) |
 | Manual connect (QR / copy-paste), no relay needed        | 4 ✅    |
-| Short human codes using a PAKE (CPace)                   | 5       |
+| Short human codes using a PAKE (CPace)                   | 5 ✅    |
 | Resume after disconnect, one-to-many, installable PWA    | 6       |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan.

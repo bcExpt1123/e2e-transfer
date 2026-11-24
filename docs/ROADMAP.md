@@ -64,10 +64,15 @@ Status:
 - WebKit runs in CI on macOS (Playwright's Linux WebKit has no WebRTC). Not yet confirmed on a real CI run.
 - Not done: per-relay health tracking in `localStorage` (ARCHITECTURE § Why this scales). Moves to phase 6.
 
-## Phase 5: Short codes
+## Phase 5: Short codes ✅
 
 - CPace over ristretto255 (`@noble/curves`), a word list, and code entry UI with autocomplete.
 - Test vectors from the CPace draft.
+
+Status: CPace follows draft-irtf-cfrg-cpace-21 and passes its §B.3 vectors (generator, shares, K, both ISKs, sid
+outputs, invalid points). Key confirmation and a 3-attempt limit per code are added on top (PROTOCOL §6). The
+word list is BIP-39 English. Code mode is a separate entry point (`@e2e-transfer/core/code`), loaded on demand
+(25 KB gzipped).
 
 ## Phase 6: Resume, many receivers, PWA
 

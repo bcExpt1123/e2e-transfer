@@ -10,7 +10,7 @@ const IV_BYTES = 12;
 const AAD = utf8('sig/v1');
 const MAX_SEEN = 4096;
 
-export type SignalType = 'join' | 'offer' | 'answer' | 'ice' | 'bye';
+export type SignalType = 'join' | 'offer' | 'answer' | 'ice' | 'bye' | 'pake';
 
 export interface SignalMessage {
   /** Per-tab random id of the author. */
@@ -26,7 +26,7 @@ interface Plaintext extends SignalMessage {
   ts: number;
 }
 
-const TYPES = new Set<string>(['join', 'offer', 'answer', 'ice', 'bye']);
+const TYPES = new Set<string>(['join', 'offer', 'answer', 'ice', 'bye', 'pake']);
 
 export interface SignalSessionOptions {
   /** Drop messages whose timestamp differs from ours by more than this. */

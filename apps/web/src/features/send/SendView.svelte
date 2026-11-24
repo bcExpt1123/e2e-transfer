@@ -7,7 +7,7 @@
   import { describeError } from '../../lib/errors.ts';
   import { formatBytes } from '../../lib/format.ts';
   import { i18n } from '../../lib/i18n/index.svelte.ts';
-  import type { SendController } from '../../lib/state/send.svelte.ts';
+  import { CODE_MAX_ATTEMPTS, type SendController } from '../../lib/state/send.svelte.ts';
   import { appUi, settings } from '../../lib/state/settings.svelte.ts';
   import { statusLine, transferDetail } from '../../lib/transfer-text.ts';
   import { Button, Card, ErrorPanel, FileList, StatusStepper, TransferPanel } from '../../lib/ui/index.ts';
@@ -34,6 +34,7 @@
     'configureTurn',
     'learnMore',
     'useQr',
+    'newCode',
   ]);
   const errorView = $derived(ctrl.error ? describeError(ctrl.error, m, SUPPORTED) : null);
 
@@ -67,6 +68,7 @@
     else if (id === 'learnMore') appUi.aboutOpen = true;
     else if (id === 'reload') location.reload();
     else if (id === 'useQr') ctrl.switchMode('manual');
+    else if (id === 'newCode') ctrl.retry();
     else if (id === 'startOver') ctrl.reset();
     else ctrl.retry();
   }
@@ -123,6 +125,9 @@
     link={ctrl.link}
     phase={ctrl.phase}
     mode={ctrl.mode}
+    code={ctrl.code}
+    wrongCodes={ctrl.wrongCodes}
+    maxCodeAttempts={CODE_MAX_ATTEMPTS}
     {summary}
     onstop={() => ctrl.reset()}
     onswitch={(mode) => ctrl.switchMode(mode)}

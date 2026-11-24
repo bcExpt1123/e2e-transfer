@@ -68,6 +68,13 @@ Offered on the Share screen ("No internet relay? Connect manually") and as the a
 The link now carries the sender's offer and is shown as a QR code. Opening it on the other device shows a reply
 code (text and QR) to bring back; the sender pastes it, or scans it where the browser supports `BarcodeDetector`.
 
+### Short codes
+
+- **Sender:** the Share screen offers "Use a short code instead". It shows a large code (`7-guitar-ocean`) to read
+  out or copy, and notes each wrong guess ("Someone entered a wrong code (1 of 3 tries)").
+- **Receiver:** the home screen has a "Have a code?" field with word autocomplete (a combobox with suggestions). After
+  a wrong code, "Try again" returns to the field.
+
 ### Receive: Review
 
 ```
@@ -118,6 +125,8 @@ Core emits typed `ErrorCode`s, and `apps/web/src/lib/errors.ts` is the **only** 
 | `STORAGE_QUOTA`         | "Not enough space to save these files."                                    | Choose another folder                             |
 | `CANCELLED`             | "Transfer cancelled."                                                      | Start over                                        |
 | `VERSION_MISMATCH`      | "The other device uses an incompatible version."                           | Reload the page                                   |
+| `CODE_INVALID`          | "That code didn't work. Check it with the sender and try again."           | Try again (back to the code field)                |
+| `CODE_ATTEMPTS`         | "Wrong codes were entered too many times, so this code was closed."        | Make a new code                                   |
 
 ## Visual design
 

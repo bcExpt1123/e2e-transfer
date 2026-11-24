@@ -44,6 +44,12 @@ export const en = {
     hideQr: 'Hide QR code',
     qrLabel: 'QR code of the secret link',
     toManual: 'No internet relay? Connect manually',
+    toCode: 'Use a short code instead',
+    toLink: 'Use a link instead',
+    codeTitle: 'Tell them this code',
+    codeHint: 'On the other device, open this site and enter the code. It works once.',
+    codeLabel: 'Short code',
+    wrongCode: (n: number, max: number) => `Someone entered a wrong code (${n} of ${max} tries).`,
     toRelay: 'Use the relay network instead',
     manualTitle: 'Connect manually',
     manualSteps:
@@ -65,9 +71,17 @@ export const en = {
     send: 'Send',
     decline: 'Decline',
   },
+  codeEntry: {
+    title: 'Have a code?',
+    label: 'Code from the sender',
+    placeholder: '7-guitar-ocean',
+    submit: 'Receive',
+    invalid: 'Codes look like 7-guitar-ocean: a number and two words.',
+  },
   receive: {
     title: 'Incoming transfer',
     connecting: 'Connecting to the sender',
+    checkingCode: 'Checking the code…',
     words: 'The sender may ask you for these words:',
     replyTitle: 'Send this reply code back',
     replyHint: 'Paste it on the sender’s device, or let it scan the QR code. Keep this page open.',
@@ -176,6 +190,8 @@ export const en = {
     STORAGE_QUOTA: 'Not enough space to save these files.',
     CANCELLED: 'Transfer cancelled.',
     VERSION_MISMATCH: 'The other device uses an incompatible version.',
+    CODE_INVALID: 'That code didn’t work. Check it with the sender and try again.',
+    CODE_ATTEMPTS: 'Wrong codes were entered too many times, so this code was closed.',
   } satisfies Record<ErrorCode, string>,
   errorActions: {
     retry: 'Retry',
@@ -189,6 +205,7 @@ export const en = {
     tryAgain: 'Try again',
     chooseFolder: 'Choose another folder',
     reload: 'Reload page',
+    newCode: 'Make a new code',
   } satisfies Record<ErrorAction, string>,
 };
 

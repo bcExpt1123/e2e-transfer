@@ -3,15 +3,21 @@
  * Picks the best storage: a folder the user chooses (fs-access), else OPFS, else memory.
  */
 import {
+  type Bytes,
   browserRtc,
-  type ErrorCode,
+  type Emitter,
+  ErrorCode,
   type FileSink,
   isTransferError,
+  type LinkEvents,
   type LinkPhase,
   LinkReceiver,
   type Manifest,
+  type ReceiverProgress,
   type RtcFactory,
+  TransferError,
 } from '@e2e-transfer/core';
+import type { CodeReceiver } from '@e2e-transfer/core/code';
 import {
   clearOpfs,
   type DirectorySink,
@@ -76,7 +82,7 @@ export class ReceiveController {
   );
 
   readonly #deps: ReceiveDeps;
-  #session: LinkReceiver | undefined;
+  #session: LinkReceiver | CodeReceiver | undefined;
   #decide: ((sink: FileSink | null) => void) | undefined;
   #sink: FileSink | undefined;
   readonly #meter = new RateMeter();
@@ -91,6 +97,10 @@ export class ReceiveController {
 
   get inMemory(): boolean {
     return this.#deps.inMemory();
+  }
+
+  get byCode(): boolean {
+    return incoming.code !== null;
   }
 
   get manual(): boolean {
@@ -108,7 +118,8 @@ export class ReceiveController {
   /** Connect using the link that opened this page. */
   async start(): Promise<void> {
     const secret = incoming.secret;
-    if (!secret) {
+    const typed = incoming.code;
+    if (!secret && !typed) {
       this.error = 'LINK_INVALID';
       this.phase = 'failed';
       return;
@@ -123,38 +134,56 @@ export class ReceiveController {
     this.#meter.reset();
     this.phase = 'joining';
 
-    let session: LinkReceiver;
+    let session: LinkReceiver | CodeReceiver;
     try {
-      session = new LinkReceiver({
-        secret,
-        signaling: await this.#deps.createSignaling(),
-        rtc: this.#deps.rtc,
-        iceServers: iceServers(),
-        hint: describeDevice(navigator.userAgent),
-        ...(incoming.offer && { offer: incoming.offer }),
-        onManifest: (manifest) => {
-          this.manifest = manifest;
-          this.total = manifest.total;
-          return new Promise<{ sink: FileSink } | null>((resolve) => {
-            this.#decide = (sink) => resolve(sink ? { sink } : null);
-          });
-        },
-      });
+      const signaling = await this.#deps.createSignaling();
+      const onManifest = (manifest: Manifest) => {
+        this.manifest = manifest;
+        this.total = manifest.total;
+        return new Promise<{ sink: FileSink } | null>((resolve) => {
+          this.#decide = (sink) => resolve(sink ? { sink } : null);
+        });
+      };
+      if (typed) {
+        const { CodeReceiver, parseCode } = await import('@e2e-transfer/core/code');
+        const code = parseCode(typed);
+        if (!code) throw new TransferError(ErrorCode.CodeInvalid, 'unparsable code');
+        session = new CodeReceiver({
+          code,
+          signaling,
+          rtc: this.#deps.rtc,
+          iceServers: iceServers(),
+          onManifest,
+        });
+      } else
+        session = new LinkReceiver({
+          secret: secret as Bytes,
+          signaling,
+          rtc: this.#deps.rtc,
+          iceServers: iceServers(),
+          hint: describeDevice(navigator.userAgent),
+          ...(incoming.offer && { offer: incoming.offer }),
+          onManifest,
+        });
     } catch (err) {
       this.#fail(err);
       return;
     }
     this.#session = session;
-    session.on('phase', (p) => {
+    // Both session kinds emit the link events; CodeSender adds `wrongCode`.
+    const events: Pick<Emitter<LinkEvents<ReceiverProgress>>, 'on'> = session;
+    events.on('phase', (p) => {
       if (this.#session === session) this.phase = p;
     });
-    session.on('code', (c) => {
-      if (this.#session === session) this.replyCode = c;
-    });
-    session.on('words', (w) => {
+    if (session instanceof LinkReceiver) {
+      session.on('code', (c) => {
+        if (this.#session === session) this.replyCode = c;
+      });
+    }
+    events.on('words', (w) => {
       if (this.#session === session) this.words = w;
     });
-    session.on('progress', ({ received, total }) => {
+    events.on('progress', ({ received, total }) => {
       if (this.#session !== session) return;
       this.done = received;
       this.total = total;
