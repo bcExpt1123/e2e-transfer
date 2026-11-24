@@ -74,12 +74,33 @@ outputs, invalid points). Key confirmation and a 3-attempt limit per code are ad
 word list is BIP-39 English. Code mode is a separate entry point (`@e2e-transfer/core/code`), loaded on demand
 (25 KB gzipped).
 
-## Phase 6: Resume, many receivers, PWA
+## Phase 6: Resume, many receivers, PWA ✅
 
 - Resume from ACK offsets after a reconnect.
 - One-to-many: the sender keeps N peer connections, each with its own session keys (default cap 5).
 - `vite-plugin-pwa`: installable and offline-capable shell. Share Target API ("Share to e2e-transfer").
 - i18n and an a11y audit.
+- Per-relay health tracking (moved here from phase 4).
+
+Status:
+
+- **Resume:** after a lost connection (or 8 s in `disconnected`) both sides reconnect on their own and continue from
+  the receiver's written offset. Nobody is asked again, and the screen shows "Reconnecting…". The new handshake is
+  keyed by a ticket from the interrupted session, so a stranger with the link can't step in (PROTOCOL §4.6). It works
+  while both pages stay open; resuming after a reload is not covered. Tested with a fake network that drops mid-file
+  (twice in one transfer) and in Chromium and Firefox by closing the real `RTCPeerConnection` mid-transfer.
+- **Several devices:** an opt-in switch on the Share screen (up to 5 at a time). Each device has its own slot,
+  connection, keys, approval and resume. With the switch off, extra devices are told the sender is busy (`LINK_BUSY`).
+- **PWA:** offline shell, PNG icons rendered from the SVGs (`apps/web/scripts/render-icons.mjs`), and a Share Target
+  (`public/sw-extras.js`). Updates wait until every tab is closed, so they never land mid-transfer.
+- **i18n:** German added and loaded on demand; the browser language is followed and the Settings choice is
+  remembered. A test checks every catalog matches English key for key.
+- **a11y:** axe in light, dark and German and on the several-devices screen; a keyboard-only send flow test;
+  "Reconnecting…" announced once; spinners respect reduced motion.
+- **Relay health:** relays and brokers that answer fast are tried first; one that failed twice in a row rests for 30
+  minutes (never below two per network).
+- Not verified: WebKit on the macOS CI runner; Share Target and install on a real Android device; a real network
+  switch (Wi-Fi to mobile data) during a transfer, which the closed-connection test only approximates.
 
 ## Later / ideas
 

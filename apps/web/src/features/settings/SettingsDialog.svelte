@@ -46,7 +46,7 @@
       <select
         class="h-11 rounded-md border border-border bg-surface px-3 font-normal"
         value={i18n.locale}
-        onchange={(e) => (i18n.locale = e.currentTarget.value as Locale)}
+        onchange={(e) => void i18n.setLocale(e.currentTarget.value as Locale)}
       >
         {#each locales as l (l.id)}
           <option value={l.id}>{l.label}</option>

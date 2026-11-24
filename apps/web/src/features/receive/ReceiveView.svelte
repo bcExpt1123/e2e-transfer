@@ -10,7 +10,7 @@
   import { incoming } from '../../lib/state/link.svelte.ts';
   import type { ReceiveController, SaveTarget } from '../../lib/state/receive.svelte.ts';
   import { appUi, settings } from '../../lib/state/settings.svelte.ts';
-  import { connectStep, statusLine, transferDetail } from '../../lib/transfer-text.ts';
+  import { connectStep, statusLine, transferLine, transferTitle } from '../../lib/transfer-text.ts';
   import {
     Button,
     Card,
@@ -52,7 +52,7 @@
     if (incoming.status === 'invalid') return 'error';
     const p = ctrl.phase;
     if (p === 'reviewing' && ctrl.manifest) return 'review';
-    if (p === 'transferring' || p === 'finishing') return 'transfer';
+    if (p === 'transferring' || p === 'finishing' || p === 'reconnecting') return 'transfer';
     if (p === 'done') return 'done';
     if (p === 'declined' && !ctrl.error) return 'declined';
     if (p === 'failed' || p === 'cancelled' || p === 'declined') return 'error';
@@ -134,9 +134,10 @@
 {:else if view === 'transfer'}
   <Card>
     <TransferPanel
-      title={ctrl.phase === 'finishing' ? m.transfer.finishing : `${m.transfer.receiving} ${summary}`}
+      title={transferTitle(m, ctrl.phase, m.transfer.receiving, summary)}
       percent={ctrl.percent}
-      detail={transferDetail(m, ctrl.done, ctrl.total, ctrl.rate)}
+      busy={ctrl.phase === 'reconnecting'}
+      detail={transferLine(m, ctrl.phase, ctrl.done, ctrl.total, ctrl.rate)}
       progressLabel={m.transfer.progressLabel}
       labels={{
         cancel: m.transfer.cancel,
@@ -144,7 +145,7 @@
         yes: m.transfer.yesCancel,
         no: m.transfer.keepGoing,
       }}
-      oncancel={ctrl.phase === 'transferring' ? () => ctrl.cancel() : undefined}
+      oncancel={ctrl.phase === 'finishing' ? undefined : () => ctrl.cancel()}
     />
   </Card>
 {:else if view === 'done'}

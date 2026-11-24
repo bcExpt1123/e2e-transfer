@@ -37,22 +37,41 @@ export const browserRtc: RtcFactory = (config) => new RTCPeerConnection(config) 
 export const DATA_CHANNEL_LABEL = 'e2e-transfer/v1';
 
 /**
+ * A connection that stays "disconnected" this long counts as lost. Browsers take up to ~30 s
+ * to declare it "failed"; giving up sooner lets resume (PROTOCOL §4.6) start sooner.
+ */
+export const DISCONNECTED_GRACE_MS = 8_000;
+
+/**
  * Adapt an open RTCDataChannel to the engine's MessageChannelLike.
  * Closing the channel also closes the peer connection; a failed connection counts as closed.
  */
-export function dataChannelAdapter(dc: RtcDataChannelLike, pc?: RtcPeerLike): MessageChannelLike {
+export function dataChannelAdapter(
+  dc: RtcDataChannelLike,
+  pc?: RtcPeerLike,
+  disconnectedGraceMs = DISCONNECTED_GRACE_MS,
+): MessageChannelLike {
   dc.binaryType = 'arraybuffer';
   const closeListeners = new Set<() => void>();
   let closed = dc.readyState === 'closing' || dc.readyState === 'closed';
+  let graceTimer: ReturnType<typeof setTimeout> | undefined;
 
   const markClosed = () => {
+    clearTimeout(graceTimer);
     if (closed) return;
     closed = true;
     for (const cb of [...closeListeners]) cb();
     closeListeners.clear();
   };
   const onState = () => {
-    if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'closed')) markClosed();
+    if (!pc) return;
+    const state = pc.connectionState;
+    if (state === 'failed' || state === 'closed') markClosed();
+    else if (state === 'disconnected') graceTimer ??= setTimeout(markClosed, disconnectedGraceMs);
+    else {
+      clearTimeout(graceTimer);
+      graceTimer = undefined;
+    }
   };
   dc.addEventListener('close', markClosed);
   dc.addEventListener('error', markClosed);
@@ -94,6 +113,7 @@ export function dataChannelAdapter(dc: RtcDataChannelLike, pc?: RtcPeerLike): Me
       return () => closeListeners.delete(cb);
     },
     close() {
+      clearTimeout(graceTimer);
       dc.removeEventListener('close', markClosed);
       pc?.removeEventListener('connectionstatechange', onState);
       dc.close();

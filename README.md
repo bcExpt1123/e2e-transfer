@@ -2,9 +2,9 @@
 
 **Peer-to-peer, end-to-end encrypted file transfer in the browser. No accounts, no uploads, no server of our own.**
 
-Open the app and drop in a file. Share the link (or, later, a short code like `7-guitar-orbit`). The bytes go directly from one browser to the other over WebRTC, encrypted with a key that never leaves the two devices.
+Open the app and drop in a file. Share the link (or a short code like `7-guitar-ocean`). The bytes go directly from one browser to the other over WebRTC, encrypted with a key that never leaves the two devices.
 
-> Status: **phase 5**. Transfers work end to end over WebRTC with a secret link, a short code (`7-guitar-ocean`, CPace PAKE) or a manual QR / paste exchange that needs no relay at all. See the [roadmap](docs/ROADMAP.md).
+> Status: **phase 6**. Transfers work end to end over WebRTC with a secret link, a short code (`7-guitar-ocean`, CPace PAKE) or a manual QR / paste exchange that needs no relay at all. Dropped connections resume on their own, one link can serve several devices, and the app installs as a PWA with a share target. See the [roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -42,7 +42,9 @@ Open the app and drop in a file. Share the link (or, later, a short code like `7
 | Multi-GB files streamed to disk (no RAM limit)           | 3 (MVP) |
 | Manual connect (QR / copy-paste), no relay needed        | 4 ✅    |
 | Short human codes using a PAKE (CPace)                   | 5 ✅    |
-| Resume after disconnect, one-to-many, installable PWA    | 6       |
+| Resume after disconnect, one-to-many, installable PWA    | 6 ✅    |
+| Share to the app from other apps (PWA Share Target)      | 6 ✅    |
+| English and German, more via one file per language       | 6 ✅    |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan.
 

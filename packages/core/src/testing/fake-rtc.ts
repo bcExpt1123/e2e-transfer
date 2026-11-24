@@ -115,6 +115,19 @@ export class FakePeer extends EventTarget implements RtcPeerLike {
     registry.delete(this.id);
   }
 
+  /**
+   * Simulate the network going away under a live connection: both ends see "failed",
+   * and nothing in flight arrives any more (no close handshake).
+   */
+  sever() {
+    for (const peer of [this, this.other]) {
+      if (!peer) continue;
+      const ch = peer.channel;
+      if (ch) ch.peer = undefined;
+      peer.#setState('failed');
+    }
+  }
+
   #maybeGather() {
     // Real agents gather as soon as the local description is set; trickled candidates
     // are only useful to the peer once it knows us, so keep the old ordering for those.

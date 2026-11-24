@@ -97,3 +97,28 @@ export async function deriveSessionKeys(
   raw.r2s.fill(0);
   return { s2r, r2s };
 }
+
+/**
+ * Resume ticket (PROTOCOL §4.6): only the two ends of a session know `ikm`, so only they can
+ * complete the handshake of a resumed session. `id` routes the rejoin on the relays; it is
+ * visible to anyone holding the link and reveals nothing about `ikm`.
+ */
+export interface ResumeTicket {
+  readonly id: string;
+  readonly ikm: CryptoKey;
+}
+
+export async function deriveResumeTicket(
+  sessionIkm: CryptoKey,
+  nonceS: Bytes,
+  nonceR: Bytes,
+): Promise<ResumeTicket> {
+  const salt = concat(nonceS, nonceR);
+  const [id, raw] = await Promise.all([
+    hkdf(sessionIkm, salt, 'resume-id', 8),
+    hkdf(sessionIkm, salt, 'resume', 32),
+  ]);
+  const ikm = await crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveBits']);
+  raw.fill(0);
+  return { id: toHex(id), ikm };
+}

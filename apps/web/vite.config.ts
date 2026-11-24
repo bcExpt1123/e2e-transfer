@@ -39,9 +39,11 @@ export default defineConfig({
     cspPlugin(),
     !isTest &&
       VitePWA({
-        registerType: 'autoUpdate',
+        // Updates wait until every tab is closed: activating mid-transfer could delete lazy chunks
+        // an open page still needs. The first install takes control at once (offline, share target).
+        registerType: 'prompt',
         injectRegister: 'script',
-        includeAssets: ['favicon.svg'],
+        includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
         manifest: {
           name: 'e2e-transfer',
           short_name: 'e2e-transfer',
@@ -50,12 +52,26 @@ export default defineConfig({
           background_color: '#f7f7f8',
           display: 'standalone',
           start_url: '.',
+          id: '.',
           icons: [
             { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-            { src: 'icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+            { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           ],
+          // "Share to e2e-transfer" from other apps (public/sw-extras.js).
+          share_target: {
+            action: 'share-target',
+            method: 'POST',
+            enctype: 'multipart/form-data',
+            params: { files: [{ name: 'files', accept: ['*/*'] }] },
+          },
         },
-        workbox: { globPatterns: ['**/*.{js,css,html,svg}'] },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,svg,png}'],
+          importScripts: ['sw-extras.js'],
+          cleanupOutdatedCaches: true,
+        },
       }),
   ],
   build: { target: 'es2022' },

@@ -15,9 +15,12 @@ import {
   type RtcPeerLike,
 } from './rtc.ts';
 
+/** The part of a SignalSession that connecting needs; LinkSender hands each receiver a filtered view. */
+export type SignalPort = Pick<SignalSession, 'send' | 'on'>;
+
 export interface ConnectOptions {
   role: Role;
-  signal: SignalSession;
+  signal: SignalPort;
   rtc: RtcFactory;
   iceServers: RTCIceServer[];
   /** Receiver: give up when no offer arrives within this time (PEER_TIMEOUT). */
@@ -31,6 +34,8 @@ export interface ConnectOptions {
   onConnecting?: (peer: { hint?: string }) => void;
   /** Receiver: short device description sent in `join` (e.g. "Firefox on Android"). */
   hint?: string;
+  /** Receiver: resume ticket id sent in `join`, so the sender continues the interrupted transfer. */
+  resumeId?: string;
 }
 
 export const CONNECT_DEFAULTS = {
@@ -82,7 +87,10 @@ class Connector {
 
   #startJoining() {
     const { signal } = this.#o;
-    const d = this.#o.hint ? { hint: this.#o.hint } : {};
+    const d = {
+      ...(this.#o.hint && { hint: this.#o.hint }),
+      ...(this.#o.resumeId && { resume: this.#o.resumeId }),
+    };
     const join = () => void signal.send('join', d).catch(() => {});
     join();
     const interval = setInterval(() => {
@@ -106,7 +114,13 @@ class Connector {
     if (this.#peerId !== undefined && msg.from !== this.#peerId) return;
 
     if (msg.t === 'bye') {
-      if (this.#peerId === undefined) return;
+      if (this.#peerId === undefined) {
+        // The sender turned our join away: it is sending to as many devices as it allows.
+        if (role === 'receiver' && msg.to !== undefined && msg.d.reason === 'busy') {
+          this.#fail(new TransferError(ErrorCode.LinkBusy, 'sender is busy'));
+        }
+        return;
+      }
       const code = msg.d.reason === 'cancelled' ? ErrorCode.Cancelled : ErrorCode.ConnectionLost;
       this.#fail(new TransferError(code, 'peer left'));
       return;

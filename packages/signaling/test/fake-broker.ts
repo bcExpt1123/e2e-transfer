@@ -6,7 +6,7 @@ export class FakeBroker {
   readonly published: string[] = [];
   constructor(
     readonly url: string,
-    readonly mode: 'ok' | 'refuse' | 'reject-connect' = 'ok',
+    readonly mode: 'ok' | 'refuse' | 'reject-connect' | 'silent' = 'ok',
   ) {}
 }
 
@@ -49,6 +49,7 @@ export class FakeMqttSocket implements BinarySocketLike {
     while ((data[i] ?? 0) & 0x80) i++;
     const body = data.subarray(i + 1);
     if (type === 1) {
+      if (this.broker.mode === 'silent') return; // never answers CONNECT
       const proto = readStr(body, 0);
       if (proto.s !== 'MQTT' || body[proto.next] !== 4) throw new Error('bad CONNECT');
       this.clientId = readStr(body, proto.next + 4).s;

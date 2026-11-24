@@ -47,8 +47,9 @@ interface types. `core` contains no DOM or UI code apart from the WebRTC and Web
 
 ```
 idle ─► joining ─► waiting ─► connecting ─► handshaking ─► connected ─► awaiting-accept/reviewing ─► transferring ─► finishing ─► done
-                       │             │              │                 │                 │
-                       └─────────────┴──────────────┴─────────────────┴──────► failed / cancelled
+                       │             │              │                 │                 │      ▲    │
+                       └─────────────┴──────────────┴─────────────────┴──────► failed / cancelled  │
+                                                                                  reconnecting ◄──┘ (lost connection)
 ```
 
 | State           | Sender                                        | Receiver                                         |
@@ -60,10 +61,21 @@ idle ─► joining ─► waiting ─► connecting ─► handshaking ─► c
 | connected       | user confirms the device (Approve)            | wait for `MANIFEST`                              |
 | awaiting-accept | send `MANIFEST`                               | user accepts → `ACCEPT` (picks sink)             |
 | transferring    | stream `CHUNK`s                               | write to sink, send `ACK`s                       |
+| reconnecting    | wait for the receiver's `join {resume}`       | keep the partial file, rejoin, resume            |
 | done            | `DONE` received                               | all files closed                                 |
 
 Roles are fixed: **the sender always makes the offer**. That avoids glare handling ("perfect negotiation")
 in v1. When the link is opened, the sender's UI asks for confirmation before sending `MANIFEST`, so a leaked link can't silently receive the file.
+
+**Sessions and slots.** `LinkReceiver` is one receiver: connect, run the `Receiver` engine, and on a lost
+connection reconnect and resume (PROTOCOL §4.6). `LinkSender` stays in the signaling room for the whole share and
+gives every receiver that joins a _slot_: its own connection, session keys, `Sender` engine and resume loop.
+Up to `maxReceivers` slots run at once. With the default of 1 it behaves as a single transfer; in "several devices"
+mode the share stays open and the UI lists each slot. Both engines are reused unchanged; resume is an option on
+each (`resume` in, `resumeState()` out), so the engines stay single-connection and easy to test.
+
+A connection counts as lost when the DataChannel closes, when ICE reports `failed`, or after 8 s in
+`disconnected`. Browsers take up to 30 s to report `failed`, so this lets resume start sooner.
 
 ## Adapter interfaces
 
@@ -143,7 +155,9 @@ File.slice() ─► encrypt (WebCrypto, async) ─► dc.send()
 Each part that does hold state (relays, TURN) is an interchangeable adapter, so no single component limits growth.
 To keep public relays from becoming a bottleneck:
 
-- Publish to several relays at once and track per-relay health (latency, failures) in `localStorage`. Unhealthy relays are skipped.
+- Publish to several relays at once and track per-relay health (latency, failures) in `localStorage`
+  (`RelayHealth` in `@e2e-transfer/signaling`). The next session connects to the fastest relays first; a relay that
+  failed twice in a row rests for 30 minutes, but at least two relays per network are always tried.
 - The relay list ships in config and can be overridden per deployment (`VITE_SIGNALING_RELAYS`) or per user in Settings.
 - Use several networks at once (Nostr and MQTT by default) instead of a sequential fallback: a sequential
   fallback could leave the two peers on different networks when one is blocked for only one of them. If every
@@ -154,7 +168,18 @@ To keep public relays from becoming a bottleneck:
 - **Ports and adapters:** new networks, storage targets and key-exchange modes are new adapters. Nothing in core changes. See the
   extension-point table in [MAINTAINABILITY.md](MAINTAINABILITY.md#extension-points-how-the-app-grows-without-rewrites).
 - **Versioned protocol:** HELLO carries the version, and future capability flags are negotiated, so old and new clients interoperate.
-- **Lazy loading:** optional features (QR scanner, MQTT, PAKE) are dynamic imports, so the initial bundle doesn't grow as features are added.
+- **Lazy loading:** optional features (QR scanner, MQTT, PAKE, languages other than English) are dynamic imports,
+  so the initial bundle doesn't grow as features are added.
+
+### Installable app (PWA)
+
+`vite-plugin-pwa` generates the manifest and a Workbox service worker that precaches the app shell, so the app
+opens offline once visited. `public/sw-extras.js` is imported into it and adds two things:
+
+- **Share Target:** other apps can share files to the installed app. The OS POSTs them to `share-target`; the worker
+  parks them in a private cache and opens `./?shared`, where the send screen takes them once and deletes them.
+- **Update policy:** the first install claims the open page at once. Updates wait until every tab is closed
+  (no `skipWaiting`), because activating a new version mid-transfer could delete lazy chunks the open page still needs.
 
 ## Testing strategy
 

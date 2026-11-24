@@ -115,6 +115,74 @@ test.describe('transfer between two browsers', () => {
     await expect(sender.getByRole('textbox', { name: 'Secret link' })).toHaveValue(link);
   });
 
+  test('several devices can download from one link', async ({ context }) => {
+    const sender = await context.newPage();
+    const payload = randomBytes(512 * 1024);
+    const link = await createLink(sender, [
+      { name: 'shared.bin', mimeType: 'application/octet-stream', buffer: payload },
+    ]);
+    await sender.getByRole('checkbox', { name: /Let several devices download/ }).check();
+    await expect(sender.getByText('Waiting for devices to open the link…')).toBeVisible();
+
+    const receivers = [await context.newPage(), await context.newPage()];
+    for (const receiver of receivers) {
+      await receiver.goto(link);
+      await expect(sender.getByRole('heading', { name: 'A device opened your link' })).toBeVisible();
+      await sender.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(receiver.getByRole('heading', { name: 'Incoming files' })).toBeVisible();
+    }
+    // The link is still on screen, with both devices listed under it.
+    await expect(sender.getByRole('textbox', { name: 'Secret link' })).toHaveValue(link);
+    await expect(sender.getByTestId('receiver')).toHaveCount(2);
+
+    for (const receiver of receivers) {
+      const downloading = receiver.waitForEvent('download');
+      await receiver.getByRole('button', { name: 'Accept & download' }).click();
+      const received = await readFile((await (await downloading).path()) ?? '');
+      expect(sha256(received)).toBe(sha256(payload));
+    }
+    await expect(sender.getByTestId('receiver').filter({ hasText: 'Delivered' })).toHaveCount(2);
+    expect(await new AxeBuilder({ page: sender }).analyze().then((r) => r.violations)).toEqual([]);
+  });
+
+  test('resumes after the connection drops mid-transfer', async ({ context }) => {
+    // Record every RTCPeerConnection so the test can pull the plug on one.
+    await context.addInitScript(() => {
+      const Native = window.RTCPeerConnection;
+      const pcs: RTCPeerConnection[] = [];
+      Object.assign(window, { __pcs: pcs });
+      window.RTCPeerConnection = class extends Native {
+        constructor(config?: RTCConfiguration) {
+          super(config);
+          pcs.push(this);
+        }
+      };
+    });
+    const sender = await context.newPage();
+    const receiver = await context.newPage();
+    const payload = randomBytes(40 * 1024 * 1024);
+    const link = await createLink(sender, [
+      { name: 'big.bin', mimeType: 'application/octet-stream', buffer: payload },
+    ]);
+    await connectAndApprove(sender, receiver, link);
+    const downloading = receiver.waitForEvent('download', { timeout: 60_000 });
+    await receiver.getByRole('button', { name: 'Accept & download' }).click();
+    await expect(receiver.getByRole('progressbar')).toBeVisible();
+    await receiver.evaluate(() => {
+      for (const pc of (window as unknown as { __pcs: RTCPeerConnection[] }).__pcs) pc.close();
+    });
+
+    const received = await readFile((await (await downloading).path()) ?? '');
+    expect(received.length).toBe(payload.length);
+    expect(sha256(received)).toBe(sha256(payload));
+    await expect(sender.getByRole('heading', { name: 'Delivered' })).toBeVisible();
+    // A second connection carried the rest; nobody was asked to approve or accept again.
+    const connections = await receiver.evaluate(
+      () => (window as unknown as { __pcs: unknown[] }).__pcs.length,
+    );
+    expect(connections).toBeGreaterThanOrEqual(2);
+  });
+
   test('share and review screens have no axe violations', async ({ context }) => {
     const sender = await context.newPage();
     const receiver = await context.newPage();

@@ -32,7 +32,7 @@ function pair(receiveDeps: Partial<ReceiveDeps> = {}) {
       inMemory: () => true,
       ...receiveDeps,
     });
-  return { send, makeReceiver };
+  return { send, makeReceiver, rtc };
 }
 
 /** Simulates opening the share link in a new tab. */
@@ -181,6 +181,73 @@ describe('send + receive controllers', () => {
     expect(receive.phase).toBe('reviewing');
     receive.cancel();
     await until(() => send.phase === 'cancelled');
+  });
+
+  it('lets several devices download from one link, each approved on its own', async () => {
+    const { send, makeReceiver } = pair();
+    send.share(items());
+    send.setMulti(true);
+    await until(() => send.phase === 'waiting');
+    openLink(send.link ?? '');
+    const [a, b] = [makeReceiver(), makeReceiver()];
+    void a.start();
+    void b.start();
+
+    await until(() => send.pending.length === 2);
+    expect(send.phase).toBe('waiting'); // the share stays up
+    expect(send.pending.map((p) => p.key)).toEqual([1, 2]);
+    send.decline(2);
+    send.approve(); // the oldest: device 1
+    await until(() => a.phase === 'reviewing' && b.phase === 'declined');
+    expect(send.busy).toBe(true);
+    await a.accept('download');
+    await until(() => a.phase === 'done' && send.receivers[0]?.phase === 'done');
+    expect(send.receivers.map((r) => r.phase)).toEqual(['done', 'declined']);
+    expect(send.busy).toBe(false);
+    send.reset();
+    expect(send.multi).toBe(false);
+  });
+
+  it('keeps going after the connection drops, showing "reconnecting" on both sides', async () => {
+    const { send, makeReceiver, rtc } = pair();
+    send.share([{ file: new File([new Uint8Array(3_000_000).fill(7)], 'big.bin'), path: 'big.bin' }]);
+    openLink(send.link ?? '');
+    const receive = makeReceiver();
+    void receive.start();
+    await until(() => send.confirming);
+    send.approve();
+    await until(() => receive.phase === 'reviewing');
+    await receive.accept('download');
+    const seen = { send: new Set<string>(), receive: new Set<string>() };
+    let cut = false;
+    await until(() => {
+      seen.send.add(send.phase);
+      seen.receive.add(receive.phase);
+      if (!cut && receive.done > 1_000_000) {
+        cut = true;
+        rtc.peers.at(-1)?.sever();
+      }
+      return receive.phase === 'done' && send.phase === 'done';
+    }, 8000);
+    expect(seen.receive.has('reconnecting')).toBe(true);
+    expect(seen.send.has('reconnecting')).toBe(true);
+    const files = receive.savedTo?.kind === 'download' ? receive.savedTo.files : [];
+    const got = new Uint8Array(await ((await files[0]?.get()) ?? new Blob()).arrayBuffer());
+    expect(got.byteLength).toBe(3_000_000);
+    expect(got.every((x) => x === 7)).toBe(true);
+  });
+
+  it('tells a second device that the sender is busy', async () => {
+    const { send, makeReceiver } = pair();
+    send.share(items());
+    openLink(send.link ?? '');
+    const first = makeReceiver();
+    void first.start();
+    await until(() => send.confirming);
+    const second = makeReceiver();
+    await second.start();
+    expect([second.phase, second.error]).toEqual(['failed', 'LINK_BUSY']);
+    send.reset();
   });
 
   it('fails clearly without a link and when signaling cannot start', async () => {

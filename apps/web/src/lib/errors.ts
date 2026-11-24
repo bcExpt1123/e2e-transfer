@@ -21,6 +21,7 @@ export const ERROR_ACTIONS: Readonly<Record<ErrorCode, readonly ErrorAction[]>> 
   [ErrorCode.VersionMismatch]: ['reload'],
   [ErrorCode.CodeInvalid]: ['tryAgain'],
   [ErrorCode.CodeAttempts]: ['newCode'],
+  [ErrorCode.LinkBusy]: ['tryAgain'],
 };
 
 export interface ErrorView {

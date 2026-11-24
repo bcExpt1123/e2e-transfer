@@ -44,7 +44,7 @@ abstract class CodeSession<P> extends Emitter<LinkEvents<P> & { wrongCode: numbe
   /** Join the nameplate, run the PAKE, then hand over to a link session with the derived secret. */
   protected async run<T, S extends { cancel(): void; start(): Promise<T> }>(
     pake: (signal: SignalSession) => Promise<Uint8Array<ArrayBuffer>>,
-    link: (secret: Uint8Array<ArrayBuffer>) => S & Emitter<LinkEvents<P>>,
+    link: (secret: Uint8Array<ArrayBuffer>) => S & Pick<Emitter<LinkEvents<P>>, 'on'>,
   ): Promise<T> {
     const { signaling, code } = this.opts;
     let signal: SignalSession | undefined;

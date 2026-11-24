@@ -12,6 +12,7 @@
   import { ReceiveController } from './lib/state/receive.svelte.ts';
   import { SendController } from './lib/state/send.svelte.ts';
   import { appUi } from './lib/state/settings.svelte.ts';
+  import { takeSharedFiles } from './lib/state/shared-files.ts';
   import { theme } from './lib/theme.svelte.ts';
   import { AppHeader, Button } from './lib/ui/index.ts';
 
@@ -23,6 +24,12 @@
   const send = new SendController();
   let receive = $state(new ReceiveController());
   const mode = $derived(incoming.status === 'none' ? 'send' : 'receive');
+
+  // Files shared to the installed app from another app's share sheet.
+  let shared = $state<File[]>([]);
+  void takeSharedFiles().then((files) => {
+    shared = files;
+  });
 
   function onhashchange() {
     // A new link pasted into the address bar of an open tab.
@@ -75,6 +82,11 @@
   let announcement = $state('');
   let lastDecile = -1;
   $effect(() => {
+    if (active.phase === 'reconnecting') {
+      lastDecile = -1; // announce progress again once it continues
+      announcement = m.transfer.reconnecting;
+      return;
+    }
     if (!transferring) {
       lastDecile = -1;
       return;
@@ -108,7 +120,7 @@
       {:else}
         <h1 class="sr-only">{m.appName}</h1>
       {/if}
-      <SendView ctrl={send} />
+      <SendView ctrl={send} {shared} onshared={() => (shared = [])} />
       {#if send.phase === 'idle'}
         <div class="mt-8 border-t border-border pt-6"><CodeEntry /></div>
       {/if}

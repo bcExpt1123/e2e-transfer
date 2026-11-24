@@ -11,6 +11,7 @@ import {
   toBase64Url,
   toHex,
 } from '@e2e-transfer/core';
+import { type RelayStatusListener, reportAttempt } from '../shared/health.ts';
 import * as mqtt from './packets.ts';
 
 export interface BinarySocketLike {
@@ -29,6 +30,8 @@ export interface MqttOptions {
   connectTimeoutMs?: number;
   keepAliveS?: number;
   createSocket?: (url: string) => BinarySocketLike;
+  /** How each broker's connection attempt went (feeds RelayHealth). */
+  onRelayStatus?: RelayStatusListener;
 }
 
 export const DEFAULT_BROKERS: readonly string[] = [
@@ -136,7 +139,9 @@ async function joinRoom(topic: string, opts: MqttOptions): Promise<SignalingRoom
       };
     });
 
-  const attempts = opts.brokers.map(connectOne);
+  const attempts = opts.brokers.map((url) =>
+    reportAttempt(url, connectOne(url), opts.onRelayStatus, () => left),
+  );
   for (const a of attempts) a.catch(() => {});
   try {
     await Promise.any(attempts);

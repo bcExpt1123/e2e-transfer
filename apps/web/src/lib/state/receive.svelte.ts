@@ -173,7 +173,9 @@ export class ReceiveController {
     // Both session kinds emit the link events; CodeSender adds `wrongCode`.
     const events: Pick<Emitter<LinkEvents<ReceiverProgress>>, 'on'> = session;
     events.on('phase', (p) => {
-      if (this.#session === session) this.phase = p;
+      if (this.#session !== session) return;
+      if (p === 'reconnecting') this.#meter.reset(); // speed restarts from zero after the gap
+      this.phase = p;
     });
     if (session instanceof LinkReceiver) {
       session.on('code', (c) => {

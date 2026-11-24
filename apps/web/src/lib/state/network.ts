@@ -3,7 +3,13 @@
  * this device, then deployment config (VITE_*), then built-in defaults.
  */
 import type { Signaling } from '@e2e-transfer/core';
-import { broadcastSignaling, multiSignaling } from '@e2e-transfer/signaling';
+import {
+  broadcastSignaling,
+  type HealthStore,
+  multiSignaling,
+  RelayHealth,
+  type RelayRecord,
+} from '@e2e-transfer/signaling';
 import { settings } from './settings.svelte.ts';
 
 const DEFAULT_STUN = ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'];
@@ -38,6 +44,16 @@ function envIce(): RTCIceServer[] | undefined {
   }
 }
 
+const HEALTH_KEY = 'e2e-transfer:relay-health';
+
+const healthStore: HealthStore = {
+  load: () => JSON.parse(localStorage.getItem(HEALTH_KEY) ?? '{}') as Record<string, RelayRecord>,
+  save: (records) => localStorage.setItem(HEALTH_KEY, JSON.stringify(records)),
+};
+
+/** Remembers which relays and brokers answer quickly, across visits (docs/ARCHITECTURE.md § Why this scales). */
+export const relayHealth = new RelayHealth(healthStore);
+
 export function iceServers(): RTCIceServer[] {
   const { stunUrls, turn } = settings.network;
   const base: RTCIceServer[] =
@@ -61,7 +77,11 @@ export async function createSignaling(): Promise<Signaling> {
     mqttBrokers.length > 0
       ? mqttBrokers
       : (envList(import.meta.env.VITE_MQTT_BROKERS) ?? mqtt.DEFAULT_BROKERS);
-  return multiSignaling([nostr.nostrSignaling({ relays }), mqtt.mqttSignaling({ brokers })]);
+  const onRelayStatus = relayHealth.record.bind(relayHealth);
+  return multiSignaling([
+    nostr.nostrSignaling({ relays: relayHealth.rank(relays), onRelayStatus }),
+    mqtt.mqttSignaling({ brokers: relayHealth.rank(brokers), onRelayStatus }),
+  ]);
 }
 
 /** Defaults shown as placeholders in Settings. */

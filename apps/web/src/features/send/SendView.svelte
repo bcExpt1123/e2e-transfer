@@ -2,21 +2,35 @@
   import CircleCheck from '@lucide/svelte/icons/circle-check';
   import Link2 from '@lucide/svelte/icons/link-2';
   import Lock from '@lucide/svelte/icons/lock';
+  import { untrack } from 'svelte';
   import { toast } from 'svelte-sonner';
   import type { ErrorAction } from '../../lib/error-actions.ts';
   import { describeError } from '../../lib/errors.ts';
   import { formatBytes } from '../../lib/format.ts';
   import { i18n } from '../../lib/i18n/index.svelte.ts';
-  import { CODE_MAX_ATTEMPTS, type SendController } from '../../lib/state/send.svelte.ts';
+  import {
+    CODE_MAX_ATTEMPTS,
+    isTerminalPhase,
+    MAX_RECEIVERS,
+    type SendController,
+  } from '../../lib/state/send.svelte.ts';
   import { appUi, settings } from '../../lib/state/settings.svelte.ts';
-  import { statusLine, transferDetail } from '../../lib/transfer-text.ts';
+  import { statusLine, transferLine, transferTitle } from '../../lib/transfer-text.ts';
   import { Button, Card, ErrorPanel, FileList, StatusStepper, TransferPanel } from '../../lib/ui/index.ts';
   import ApproveCard from './ApproveCard.svelte';
   import { fromFileList, mergePicked, type PickedFile } from './collect-files.ts';
   import DropZone from './DropZone.svelte';
+  import ReceiverList from './ReceiverList.svelte';
   import ShareCard from './ShareCard.svelte';
 
-  let { ctrl }: { ctrl: SendController } = $props();
+  interface Props {
+    ctrl: SendController;
+    /** Files from the OS share sheet (PWA Share Target), added once. */
+    shared?: File[];
+    onshared?: () => void;
+  }
+
+  let { ctrl, shared = [], onshared }: Props = $props();
 
   const m = $derived(i18n.m);
 
@@ -38,13 +52,18 @@
   ]);
   const errorView = $derived(ctrl.error ? describeError(ctrl.error, m, SUPPORTED) : null);
 
+  // "Several devices": the link stays up; each device shows up in a list instead of taking over the screen.
+  const sharing = $derived(ctrl.multi && (ctrl.phase === 'joining' || ctrl.phase === 'waiting'));
+  const anyoneConnected = $derived(ctrl.receivers.some((r) => !isTerminalPhase(r.phase)));
+
   const view = $derived.by(() => {
     const p = ctrl.phase;
     if (p === 'idle') return 'pick';
+    if (sharing) return 'share';
     if (p === 'joining' || p === 'waiting' || p === 'connecting' || p === 'handshaking') return 'share';
     if (p === 'connected' && ctrl.confirming) return 'approve';
     if (p === 'connected' || p === 'awaiting-accept') return 'accepting';
-    if (p === 'transferring' || p === 'finishing') return 'transfer';
+    if (p === 'transferring' || p === 'finishing' || p === 'reconnecting') return 'transfer';
     if (p === 'done') return 'done';
     return 'error';
   });
@@ -54,6 +73,12 @@
     picked = mergePicked(picked, files);
     toast.success(m.send.added(files.length));
   }
+
+  $effect(() => {
+    if (shared.length === 0) return;
+    untrack(() => add(fromFileList(shared)));
+    onshared?.();
+  });
 
   function onpaste(e: ClipboardEvent) {
     const files = e.clipboardData?.files;
@@ -121,6 +146,19 @@
     </p>
   </div>
 {:else if view === 'share'}
+  {#if sharing && ctrl.peer}
+    {#key ctrl.peer.key}
+      <div class="mb-4">
+        <ApproveCard
+          {summary}
+          words={ctrl.peer.words}
+          hint={ctrl.peer.hint}
+          onsend={() => ctrl.approve()}
+          ondecline={() => ctrl.decline()}
+        />
+      </div>
+    {/key}
+  {/if}
   <ShareCard
     link={ctrl.link}
     phase={ctrl.phase}
@@ -129,10 +167,18 @@
     wrongCodes={ctrl.wrongCodes}
     maxCodeAttempts={CODE_MAX_ATTEMPTS}
     {summary}
+    multi={ctrl.multi}
+    maxReceivers={MAX_RECEIVERS}
+    onmulti={anyoneConnected ? undefined : (on) => ctrl.setMulti(on)}
     onstop={() => ctrl.reset()}
     onswitch={(mode) => ctrl.switchMode(mode)}
     onreply={(code) => ctrl.submitReply(code)}
   />
+  {#if sharing && ctrl.receivers.length > 0}
+    <div class="mt-4">
+      <ReceiverList receivers={ctrl.receivers} oncancel={(key) => ctrl.cancelReceiver(key)} />
+    </div>
+  {/if}
 {:else if view === 'approve'}
   <ApproveCard {summary} words={ctrl.peer?.words ?? []} hint={ctrl.peer?.hint} onsend={() => ctrl.approve()} ondecline={() => ctrl.decline()} />
 {:else if view === 'accepting'}
@@ -148,9 +194,10 @@
 {:else if view === 'transfer'}
   <Card>
     <TransferPanel
-      title={ctrl.phase === 'finishing' ? m.transfer.finishing : `${m.transfer.sending} ${summary}`}
+      title={transferTitle(m, ctrl.phase, m.transfer.sending, summary)}
       percent={ctrl.percent}
-      detail={transferDetail(m, ctrl.done, ctrl.total, ctrl.rate)}
+      busy={ctrl.phase === 'reconnecting'}
+      detail={transferLine(m, ctrl.phase, ctrl.done, ctrl.total, ctrl.rate)}
       progressLabel={m.transfer.progressLabel}
       labels={{
         cancel: m.transfer.cancel,
@@ -158,7 +205,7 @@
         yes: m.transfer.yesCancel,
         no: m.transfer.keepGoing,
       }}
-      oncancel={ctrl.phase === 'transferring' ? () => ctrl.cancel() : undefined}
+      oncancel={ctrl.phase === 'finishing' ? undefined : () => ctrl.cancel()}
     />
   </Card>
 {:else if view === 'done'}

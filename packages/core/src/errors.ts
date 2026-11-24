@@ -17,6 +17,8 @@ export const ErrorCode = {
   CodeInvalid: 'CODE_INVALID',
   /** Sender: too many wrong codes were tried; a new code is needed. */
   CodeAttempts: 'CODE_ATTEMPTS',
+  /** Receiver: the sender is already sending to as many devices as it allows. */
+  LinkBusy: 'LINK_BUSY',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

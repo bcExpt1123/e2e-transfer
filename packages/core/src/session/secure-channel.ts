@@ -6,7 +6,7 @@
 import { type Bytes, randomBytes } from '../bytes.ts';
 import { PROTOCOL_VERSION, type TransferConfig } from '../config.ts';
 import { ErrorCode, TransferError, toTransferError } from '../errors.ts';
-import { deriveSessionKeys, HELLO_NONCE_BYTES } from '../keys.ts';
+import { deriveResumeTicket, deriveSessionKeys, HELLO_NONCE_BYTES, type ResumeTicket } from '../keys.ts';
 import { type Frame, FrameCipher } from '../protocol/cipher.ts';
 import {
   decodeHello,
@@ -41,6 +41,7 @@ export class SecureChannel {
   #aborted = false;
   #unsubscribe: (() => void)[] = [];
   #words: string[] = [];
+  #ticket: ResumeTicket | undefined;
 
   constructor(channel: MessageChannelLike, role: Role, cfg: TransferConfig) {
     this.#ch = channel;
@@ -74,6 +75,11 @@ export class SecureChannel {
     return this.#words;
   }
 
+  /** Resume ticket of this session (after handshake). */
+  get ticket(): ResumeTicket | undefined {
+    return this.#ticket;
+  }
+
   get error(): TransferError | undefined {
     return this.#error;
   }
@@ -93,11 +99,13 @@ export class SecureChannel {
     if (peer.role === this.#role) throw this.#fail(protocolError(`both peers claim role ${peer.role}`));
 
     const [nonceS, nonceR] = this.#role === 'sender' ? [nonce, peer.nonce] : [peer.nonce, nonce];
-    const [keys, words] = await Promise.all([
+    const [keys, words, ticket] = await Promise.all([
       deriveSessionKeys(sessionIkm, nonceS, nonceR),
       verificationWords(sessionIkm, nonceS, nonceR),
+      deriveResumeTicket(sessionIkm, nonceS, nonceR),
     ]);
     this.#words = words;
+    this.#ticket = ticket;
     const [txKey, rxKey] = this.#role === 'sender' ? [keys.s2r, keys.r2s] : [keys.r2s, keys.s2r];
     this.#tx = new FrameCipher(txKey, this.#cfg.maxFrameSize);
     this.#rx = new FrameCipher(rxKey, this.#cfg.maxFrameSize);

@@ -99,4 +99,51 @@ test.describe('app shell', () => {
       await expectNoA11yViolations(page);
     });
   }
+
+  test('works by keyboard alone: pick files and create the link', async ({ page, browserName }) => {
+    test.skip(browserName === 'webkit', 'WebKit skips buttons when tabbing unless the OS setting is on');
+    await page.goto('./');
+    // Tab until "Choose files" has focus, then open the picker with Enter.
+    for (let i = 0; i < 10; i++) {
+      await page.keyboard.press('Tab');
+      if (
+        await page
+          .getByRole('button', { name: 'Choose files' })
+          .evaluate((el) => el === document.activeElement)
+      )
+        break;
+    }
+    const chooser = page.waitForEvent('filechooser');
+    await page.keyboard.press('Enter');
+    await (await chooser).setFiles([{ name: 'k.txt', mimeType: 'text/plain', buffer: Buffer.from('k') }]);
+
+    const create = page.getByRole('button', { name: 'Create link' });
+    for (let i = 0; i < 15 && !(await create.evaluate((el) => el === document.activeElement)); i++) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(create).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('textbox', { name: 'Secret link' })).toBeVisible();
+    // Focus is never lost to <body> after the screen changes.
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe('BODY');
+  });
+});
+
+test.describe('languages', () => {
+  test.use({ locale: 'de-DE' });
+
+  test('follows the browser language, can be switched, and remembers the choice', async ({ page }) => {
+    await page.goto('./');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+    await expect(page.getByRole('button', { name: 'Dateien wählen' })).toBeVisible();
+    await expectNoA11yViolations(page);
+
+    await page.getByRole('button', { name: 'Einstellungen' }).click();
+    await page.getByRole('combobox', { name: 'Sprache' }).selectOption('en');
+    await expect(page.getByRole('button', { name: 'Choose files' })).toBeVisible();
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.getByRole('button', { name: 'Choose files' })).toBeVisible();
+  });
 });

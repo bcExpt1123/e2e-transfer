@@ -157,9 +157,21 @@ describe('manifest validation', () => {
 
   it('validates ACCEPT indices', () => {
     const m = validateManifest(valid, DEFAULT_CONFIG);
-    expect(validateAccept({ files: [1, 0], resume: {} }, m)).toEqual({ files: [1, 0] });
+    expect(validateAccept({ files: [1, 0], extra: 1 }, m)).toEqual({ files: [1, 0] });
     for (const files of [[2], [-1], [0, 0], [0.5], ['0']]) {
       expect(() => validateAccept({ files }, m)).toThrow(/ACCEPT/);
+    }
+  });
+
+  it('validates resume offsets in ACCEPT', () => {
+    const m = validateManifest(valid, DEFAULT_CONFIG);
+    const size = m.files[1]?.size ?? 0;
+    expect(validateAccept({ files: [1], resume: { 1: size } }, m)).toEqual({
+      files: [1],
+      resume: { 1: size },
+    });
+    for (const resume of [[], 'x', { 0: 1 }, { 1: -1 }, { 1: size + 1 }, { 1: 0.5 }, { 7: 0 }]) {
+      expect(() => validateAccept({ files: [1], resume }, m)).toThrow(/resume/);
     }
   });
 });

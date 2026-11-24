@@ -18,7 +18,14 @@ export {
 } from './config.ts';
 export { Emitter, type EventMap } from './emitter.ts';
 export { ErrorCode, isTransferError, TransferError, toTransferError } from './errors.ts';
-export { deriveLinkKeys, deriveSessionKeys, type LinkKeys, SECRET_BYTES, type SessionKeys } from './keys.ts';
+export {
+  deriveLinkKeys,
+  deriveSessionKeys,
+  type LinkKeys,
+  type ResumeTicket,
+  SECRET_BYTES,
+  type SessionKeys,
+} from './keys.ts';
 export {
   encodeLink,
   generateSecret,
@@ -32,28 +39,36 @@ export type { FileMeta, FileSink, SinkWriter } from './ports/storage.ts';
 export { type Manifest, type ManifestFile, pathProblem } from './protocol/manifest.ts';
 export { SAS_WORDS, verificationWords } from './sas.ts';
 export {
+  isTerminalPhase,
   type LinkEvents,
   type LinkOptions,
   type LinkPhase,
   LinkReceiver,
   type LinkReceiverOptions,
   LinkSender,
+  type LinkSenderEvents,
   type LinkSenderOptions,
+  type LinkTimeouts,
+  type ReceiverInfo,
 } from './session/link-session.ts';
 export {
   type AcceptDecision,
+  discardResume,
   type ReceiveOutcome,
   Receiver,
   type ReceiverEvents,
   type ReceiverOptions,
   type ReceiverProgress,
+  type ReceiverResume,
 } from './session/receiver.ts';
+export { canResumeAfter, RESUME_DEFAULTS } from './session/resume.ts';
 export {
   type PeerInfo,
   Sender,
   type SenderEvents,
   type SenderOptions,
   type SenderProgress,
+  type SenderResume,
 } from './session/sender.ts';
 export { blobSource, bytesSource, type SourceFile } from './session/source.ts';
 export type { TransferPhase } from './session/types.ts';
@@ -68,10 +83,11 @@ export {
   openSdp,
   sealSdp,
 } from './transport/manual.ts';
-export { CONNECT_DEFAULTS, type ConnectOptions, connect } from './transport/peer.ts';
+export { CONNECT_DEFAULTS, type ConnectOptions, connect, type SignalPort } from './transport/peer.ts';
 export {
   browserRtc,
   DATA_CHANNEL_LABEL,
+  DISCONNECTED_GRACE_MS,
   dataChannelAdapter,
   type RtcDataChannelLike,
   type RtcFactory,

@@ -14,6 +14,7 @@ import {
   TransferError,
   toBase64Url,
 } from '@e2e-transfer/core';
+import { type RelayStatusListener, reportAttempt } from '../shared/health.ts';
 import { type Identity, type NostrEvent, newIdentity, SIGNAL_KIND, signEvent } from './event.ts';
 
 /** The WebSocket surface we need; the browser's WebSocket satisfies it. */
@@ -33,6 +34,8 @@ export interface NostrOptions {
   connectTimeoutMs?: number;
   /** Injectable for tests. */
   createSocket?: (url: string) => WebSocketLike;
+  /** How each relay's connection attempt went (feeds RelayHealth). */
+  onRelayStatus?: RelayStatusListener;
 }
 
 export const DEFAULT_RELAYS: readonly string[] = [
@@ -125,7 +128,9 @@ async function joinRoom(topic: string, opts: NostrOptions): Promise<SignalingRoo
     });
 
   // Ready as soon as one relay is up; the others join in the background.
-  const attempts = opts.relays.map(connectOne);
+  const attempts = opts.relays.map((url) =>
+    reportAttempt(url, connectOne(url), opts.onRelayStatus, () => left),
+  );
   for (const a of attempts) a.catch(() => {});
   try {
     await Promise.any(attempts);

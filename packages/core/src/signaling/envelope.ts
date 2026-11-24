@@ -50,6 +50,7 @@ export class SignalSession {
   readonly #off: () => void;
   #seq = 0;
   #closed = false;
+  readonly #sending = new Set<Promise<void>>();
 
   constructor(room: SignalingRoom, signalKey: CryptoKey, opts: SignalSessionOptions) {
     this.#room = room;
@@ -61,8 +62,16 @@ export class SignalSession {
     });
   }
 
-  async send(t: SignalType, d: Record<string, unknown> = {}, to?: string): Promise<void> {
-    if (this.#closed) return;
+  send(t: SignalType, d: Record<string, unknown> = {}, to?: string): Promise<void> {
+    if (this.#closed) return Promise.resolve();
+    // close() lets messages already on their way (e.g. a last `bye`) go out first.
+    const p = this.#send(t, d, to);
+    const tracked = p.catch(() => {}).finally(() => this.#sending.delete(tracked));
+    this.#sending.add(tracked);
+    return p;
+  }
+
+  async #send(t: SignalType, d: Record<string, unknown>, to?: string): Promise<void> {
     const plain: Plaintext = { from: this.id, seq: this.#seq++, ts: this.#now(), t, d };
     if (to !== undefined) plain.to = to;
     const iv = randomBytes(IV_BYTES);
@@ -85,6 +94,7 @@ export class SignalSession {
     this.#closed = true;
     this.#off();
     this.#listeners.clear();
+    await Promise.all([...this.#sending]);
     await this.#room.leave();
   }
 

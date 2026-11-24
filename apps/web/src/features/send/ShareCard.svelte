@@ -18,6 +18,10 @@
     code?: string | null;
     wrongCodes?: number;
     maxCodeAttempts?: number;
+    /** Relay mode: several devices may download (shown as a switch while nobody is connected). */
+    multi?: boolean;
+    maxReceivers?: number;
+    onmulti?: ((on: boolean) => void) | undefined;
     onstop: () => void;
     onswitch: (mode: 'relay' | 'manual' | 'code') => void;
     onreply: (code: string) => Promise<boolean>;
@@ -31,6 +35,9 @@
     code = null,
     wrongCodes = 0,
     maxCodeAttempts = 3,
+    multi = false,
+    maxReceivers = 5,
+    onmulti,
     onstop,
     onswitch,
     onreply,
@@ -170,6 +177,22 @@
     </form>
   {/if}
 
+  {#if mode === 'relay' && onmulti}
+    <label class="flex items-start gap-3 text-sm">
+      <input
+        type="checkbox"
+        class="mt-0.5 size-4 accent-accent"
+        checked={multi}
+        onchange={(e) => onmulti(e.currentTarget.checked)}
+        aria-describedby="multi-hint"
+      />
+      <span>
+        <span class="font-medium">{m.share.multi(maxReceivers)}</span>
+        <span id="multi-hint" class="block text-muted">{m.share.multiHint}</span>
+      </span>
+    </label>
+  {/if}
+
   {#if mode !== 'code'}
     <p class="flex gap-2 rounded-md bg-surface-2 p-3 text-sm text-muted">
       <TriangleAlert class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -183,7 +206,10 @@
       current={connectStep(phase)}
       label={m.share.title}
     />
-    <p class="text-sm text-muted">{statusLine(m, phase, 'sender')} {m.share.keepOpen}</p>
+    <p class="text-sm text-muted">
+      {multi && phase === 'waiting' ? m.share.multiWaiting : statusLine(m, phase, 'sender')}
+      {m.share.keepOpen}
+    </p>
   </div>
 
   <div class="flex flex-wrap gap-2">

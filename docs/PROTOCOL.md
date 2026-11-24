@@ -24,6 +24,8 @@ sessionPRK  = HKDF-Extract(salt = nonceS ‖ nonceR, IKM = HKDF-Expand(PRK, "ses
 keyS2R      = HKDF-Expand(sessionPRK, "s2r", 32)           // sender → receiver frames
 keyR2S      = HKDF-Expand(sessionPRK, "r2s", 32)           // receiver → sender frames
 sas         = HKDF-Expand(sessionPRK, "sas", 4)            // 4 verification words, 1 byte each
+resumeIkm   = HKDF-Expand(sessionPRK, "resume", 32)        // next session's IKM after a drop (§4.6)
+resumeId    = hex(HKDF-Expand(sessionPRK, "resume-id", 8)) // routes the rejoin; reveals nothing about resumeIkm
 ```
 
 The verification words index a fixed 256-word list (`SAS_WORDS` in `core/src/sas.ts`). Both screens show them
@@ -42,18 +44,21 @@ envelope   = iv(12, random) ‖ AES-GCM(signalKey, iv, plaintext, aad = "sig/v1"
 plaintext  = JSON { "from": b64u(8 random bytes, per tab), "to"?: id, "seq": n, "ts": unix_ms, "t": type, "d": data }
 ```
 
-`to` is the recipient's `from` id. It is absent only on `join`, which is a broadcast. Each side locks onto the
-first peer it hears from (the sender: the first `join`; the receiver: the first `offer`) and ignores everyone
-else, so a second person opening the same link can't take over the session.
+`to` is the recipient's `from` id. It is absent only on `join`, which is a broadcast. Each connection attempt
+locks onto one peer (the receiver: the first `offer`) and ignores everyone else. The sender stays in the room for
+the whole share and gives each new `join` its own slot with its own connection and session keys, up to
+`maxReceivers` at a time (default 1). A `join` beyond that limit gets `bye {reason: "busy"}`, which the receiver
+reports as `LINK_BUSY`. A `join` carrying `resume` is routed to the slot that issued that ticket (§4.6); unknown
+tickets are ignored.
 
-| `t`      | Sender of message | `d`                                                                                           |
-| -------- | ----------------- | --------------------------------------------------------------------------------------------- |
-| `join`   | receiver          | `{ hint? }`: short device description, e.g. "Firefox on Android" (unauthenticated decoration) |
-| `offer`  | sender            | `{ sdp }`                                                                                     |
-| `answer` | receiver          | `{ sdp }`                                                                                     |
-| `ice`    | both              | `{ candidate }` (trickle; omitted in manual mode)                                             |
-| `bye`    | both              | `{ reason? }`                                                                                 |
-| `pake`   | both (phase 5)    | `{ msg }`                                                                                     |
+| `t`      | Sender of message | `d`                                                                                      |
+| -------- | ----------------- | ---------------------------------------------------------------------------------------- |
+| `join`   | receiver          | `{ hint?, resume? }`: device description (unauthenticated decoration); `resumeId` (§4.6) |
+| `offer`  | sender            | `{ sdp }`                                                                                |
+| `answer` | receiver          | `{ sdp }`                                                                                |
+| `ice`    | both              | `{ candidate }` (trickle; omitted in manual mode)                                        |
+| `bye`    | both              | `{ reason? }`: `"cancelled"`, `"busy"` (sender is at its receiver limit), or none        |
+| `pake`   | both (phase 5)    | `{ msg }`                                                                                |
 
 Receivers drop messages that fail to decrypt, come from themselves, are addressed to someone else, repeat a `(from, seq)` pair already seen, or have `|now − ts| > 120 s`.
 
@@ -62,7 +67,8 @@ arrives (relays may drop messages). A repeated `join` from the locked peer makes
 repeated `offer` makes the receiver resend its answer. ICE candidates that arrive before the remote description are
 queued, including candidates that overtake the offer on the relays (buffered per author). `bye {reason: "cancelled"}` reports a cancel during setup; any other `bye` counts as a lost connection.
 The receiver gives up after 30 s without an offer (`PEER_TIMEOUT`); either side gives up when ICE fails or the channel
-isn't open 30 s after setup starts (`ICE_FAILED`). Both sides leave the signaling room once the DataChannel is open.
+isn't open 30 s after setup starts (`ICE_FAILED`). The receiver leaves the signaling room once the DataChannel is open;
+the sender stays until the share ends, to hear new receivers and returning ones (§4.6).
 Because SDP travels inside this authenticated envelope, the DTLS fingerprints are bound to `S`. Someone without the secret can't
 intercept the DataChannel.
 
@@ -159,26 +165,51 @@ AEAD per frame, strict counters and the `FILE_END` size check together guarantee
 complete. A whole-file hash is therefore **not** required. An optional BLAKE3 digest (via `hash-wasm`) may be added later as a
 `FILE_END` extension, purely for user-visible verification.
 
-### 4.6 Resume (phase 6)
+### 4.6 Resume
 
-After a disconnect, the peers repeat signaling and HELLO, which produces new keys. The receiver sends `ACCEPT.resume` with its last acknowledged offsets, and the sender
-continues from those offsets.
+A transfer interrupted by a lost connection (`CONNECTION_LOST` or `ICE_FAILED` after `ACCEPT`) continues on a new
+connection without asking either user again.
+
+1. The receiver keeps the partly written file open and rejoins the room with a new signaling id and
+   `join {resume: resumeId}` of the interrupted session.
+2. The sender routes that `join` to the slot that issued the ticket. If it hasn't noticed the drop yet, it drops the
+   old connection now. A new WebRTC connection is set up as in §3.
+3. Both sides run HELLO with fresh nonces but use `resumeIkm` instead of the link's session IKM. Only the two ends of
+   the previous session know it, so someone else holding the link can't complete this handshake. The sender skips
+   the approval step.
+4. The sender sends the same MANIFEST; the receiver checks it is identical byte for byte.
+5. The receiver answers `ACCEPT {files, resume}`: `files` lists what it still needs, in order, and `resume` maps the
+   first, partly written one to the number of bytes it has written. The sender rejects files that weren't in the
+   previous `ACCEPT`, and offsets beyond a file's size.
+6. The sender continues each listed file from its offset (`CHUNK` offsets and `ACK` values are absolute).
+
+Each resumed session has its own ticket for the next drop. A side switches to the new ticket once `ACCEPT` is sent
+(receiver) or received (sender); until then the sender also accepts the previous ticket, so an `ACCEPT` lost in the
+drop can't strand the transfer. Either side gives up after `resumeTimeoutMs` without a working connection and reports
+the original `CONNECTION_LOST`; the receiver then discards the partial file. A `CANCEL`, `ERROR`, or decline
+ends the transfer for good. Resume needs the signaling network, so manual connections (§3.1) don't resume.
+
+Resume works while both pages stay open. Surviving a reload would need the files and partial output to be
+persisted, which is out of scope for v1.
 
 ## 5. Limits and defaults
 
-| Parameter                 | Default         |
-| ------------------------- | --------------- |
-| chunkSize (plaintext)     | 61 440 (60 KiB) |
-| bufferedAmount high / low | 4 MiB / 1 MiB   |
-| ACK interval              | 1 MiB (maximum) |
-| maxUnackedBytes (window)  | 16 MiB          |
-| Signaling message max age | 120 s           |
-| `join` repeat interval    | 2 s             |
-| Peer timeout (receiver)   | 30 s            |
-| Connect timeout (ICE)     | 30 s            |
-| closeGraceMs              | 3 s             |
-| ICE gathering (manual)    | 3 s (maximum)   |
-| Max files per manifest    | 10 000          |
+| Parameter                 | Default                            |
+| ------------------------- | ---------------------------------- |
+| chunkSize (plaintext)     | 61 440 (60 KiB)                    |
+| bufferedAmount high / low | 4 MiB / 1 MiB                      |
+| ACK interval              | 1 MiB (maximum)                    |
+| maxUnackedBytes (window)  | 16 MiB                             |
+| Signaling message max age | 120 s                              |
+| `join` repeat interval    | 2 s                                |
+| Peer timeout (receiver)   | 30 s                               |
+| Connect timeout (ICE)     | 30 s                               |
+| closeGraceMs              | 3 s                                |
+| Disconnected → lost       | 8 s                                |
+| resumeTimeoutMs           | 60 s                               |
+| maxReceivers              | 1 (5 when "several devices" is on) |
+| ICE gathering (manual)    | 3 s (maximum)                      |
+| Max files per manifest    | 10 000                             |
 
 ## 6. Short codes with CPace (phase 5)
 

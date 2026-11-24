@@ -29,10 +29,22 @@ File contents, file names and sizes, and who is talking to whom.
 6. **Short codes**: CPace gives an attacker one online guess per attempt and nothing to test offline. Each code
    allows 3 attempts, which the sender sees, and is then closed. The probability of success is ≈ 7 · 10⁻⁷ per code.
 
+7. **Resume can't be hijacked**: a resumed session is keyed by a ticket that only the two ends of the interrupted
+   session derived (PROTOCOL §4.6). Holding the link isn't enough to step into a reconnecting transfer, and a
+   resumed session needs no new approval because it proves it is the device approved before.
+
+8. **Several receivers are separate**: each device gets its own connection, session keys and verification words,
+   and is approved on its own. One receiver learns nothing about the others' sessions.
+
 ## Explicit non-guarantees
 
 - **The link is a bearer credential.** Leaking it (chat history, screenshots, link previews that fetch only the
-  path, not the fragment) lets someone else connect. Mitigations: the sender must confirm the receiver before sending `MANIFEST`; links work for a single receiver unless the sender chooses multi-receiver mode; sessions expire when the sender's tab closes; and a short-code mode is planned.
+  path, not the fragment) lets someone else connect. Mitigations: the sender must confirm the receiver before sending
+  `MANIFEST`; links work for a single receiver unless the sender turns on "several devices" (each still approved one
+  by one); sessions expire when the sender's tab closes; and short codes avoid long-lived links altogether.
+- **Link holders can disrupt.** Anyone with the link can read the signaling envelope, so they can occupy the
+  sender's only slot (others then get `LINK_BUSY`), or replay a receiver's resume `join` to make the sender drop a
+  live connection, which then resumes. They can't read or alter any data. This is denial of service only.
 - **No forward secrecy against a stolen link.** Anyone with `S` and a recording of the signaling can derive session
   keys. If this matters, a future version can add an ephemeral ECDH inside the DataChannel (tracked in the roadmap).
 - **Signaling metadata.** Nostr relays can link the sender and receiver of one transfer (same topic, close in
@@ -40,6 +52,8 @@ File contents, file names and sizes, and who is talking to whom.
 - **IP addresses are revealed** to the peer and to relays. Users who need IP privacy should force relay-only ICE (TURN) or use a VPN or Tor.
 - **Malicious app code.** A compromised host could serve JavaScript that steals the key. Mitigations: a strict CSP, Subresource Integrity on any external script (none planned), reproducible builds, release hashes published in the repo, and the ability to self-host or install as a PWA. This is the same limit every web-based E2E tool has.
 - **Endpoint compromise** (malware, malicious extensions) is out of scope.
+- **Shared files stay local.** Files shared to the installed app from the OS share sheet are parked in the
+  service worker's cache on the device only until the page takes them, then deleted.
 
 ## Implementation rules
 

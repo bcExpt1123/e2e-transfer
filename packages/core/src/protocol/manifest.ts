@@ -20,6 +20,8 @@ export interface Manifest {
 export interface Accept {
   /** Indices into Manifest.files, in the order they will be sent. */
   files: number[];
+  /** Resume (PROTOCOL §4.6): byte offset to continue each listed file from (default 0). */
+  resume?: Record<number, number>;
 }
 
 const MAX_PATH_LENGTH = 4096;
@@ -88,6 +90,23 @@ export function validateAccept(value: unknown, manifest: Manifest): Accept {
     }
     seen.add(i);
   }
-  // Unknown fields (e.g. `resume`, phase 6) are ignored for forward compatibility.
-  return { files: value.files as number[] };
+  const files = value.files as number[];
+  // Unknown fields are ignored for forward compatibility.
+  if (value.resume === undefined) return { files };
+  if (!isRecord(value.resume)) throw protocolError('malformed ACCEPT resume');
+  const resume: Record<number, number> = {};
+  for (const [key, offset] of Object.entries(value.resume)) {
+    const index = Number(key);
+    const size = manifest.files[index]?.size;
+    if (!seen.has(index) || size === undefined || !isSize(offset) || offset > size) {
+      throw protocolError('invalid resume offset in ACCEPT');
+    }
+    resume[index] = offset;
+  }
+  return { files, resume };
+}
+
+/** Byte-exact comparison of two validated manifests (a resumed session must offer the same files). */
+export function sameManifest(a: Manifest, b: Manifest): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
