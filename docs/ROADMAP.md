@@ -13,7 +13,7 @@ README, [ARCHITECTURE](ARCHITECTURE.md), [PROTOCOL](PROTOCOL.md), [SECURITY](SEC
 - TypeScript strict config shared through `tsconfig.base.json`, plus Biome, Vitest, Playwright, lefthook, dependency-cruiser rules and size-limit.
 - `apps/web` shell: Tailwind v4 + `tokens.css` (light and dark), base `lib/ui` components (Button, Card, Progress, Dialog,
   FileList, StatusStepper, Toast), typed i18n with English, and an app header with Settings and "How it works" dialogs.
-- GitHub Actions: lint → typecheck → unit → dep-rules → build → size-limit → e2e (+ axe). Preview deploy per PR, `main` → GitHub Pages.
+- GitHub Actions: lint → typecheck → unit → dep-rules → build → size-limit → e2e (+ axe). Preview deploy per PR, `main` → Firebase Hosting ([DEPLOY.md](DEPLOY.md)).
 
 **Done when:** `pnpm install && pnpm lint && pnpm -r typecheck && pnpm test && pnpm build` passes on a clean checkout and in CI. The
 shell scores ≥ 95 on Lighthouse performance and accessibility, and the bundle stays within the [UX budgets](UX.md#performance-budgets-enforced-in-ci).

@@ -5,7 +5,10 @@ import type { Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
-/** docs/SECURITY.md § Implementation rules. Injected at build time only (dev server needs inline HMR). */
+/**
+ * docs/SECURITY.md § Implementation rules. Injected at build time only (dev server needs inline HMR).
+ * Keep in sync with the Content-Security-Policy header in firebase.json (which adds frame-ancestors).
+ */
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -30,7 +33,7 @@ const isTest = Boolean(process.env.VITEST);
 
 export default defineConfig({
   root: import.meta.dirname,
-  // GitHub Pages serves from /<repo>/; CI sets BASE_PATH.
+  // Firebase Hosting serves from the root. Set BASE_PATH to self-host under a sub-path (e.g. /e2e-transfer/).
   base: process.env.BASE_PATH ?? '/',
   plugins: [
     tailwindcss(),

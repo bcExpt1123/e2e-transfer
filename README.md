@@ -61,7 +61,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for the full plan.
 | Storage          | File System Access API → OPFS → in-memory Blob (small files)                                                    |
 | Tests            | Vitest (unit, component), Playwright (real WebRTC, axe a11y, visual snapshots)                                  |
 | Quality gates    | Biome, dependency-cruiser (layer rules), size-limit (bundle budget), Renovate, release-please                   |
-| Hosting          | Any static host: GitHub Pages, Cloudflare Pages, Netlify                                                        |
+| Hosting          | Firebase Hosting via GitHub Actions ([docs/DEPLOY.md](docs/DEPLOY.md)); any static host works                   |
 
 The reasoning behind these choices is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/adr/](docs/adr/).
 
