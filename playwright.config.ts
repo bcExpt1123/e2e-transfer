@@ -26,20 +26,7 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
     ...(allBrowsers
       ? [
-          {
-            name: 'firefox',
-            use: {
-              ...devices['Desktop Firefox'],
-              // CI runners can't resolve the mDNS (.local) names Firefox puts in host candidates,
-              // so two pages on one machine would never connect. Use plain host addresses there.
-              launchOptions: {
-                firefoxUserPrefs: {
-                  'media.peerconnection.ice.obfuscate_host_addresses': false,
-                  'media.peerconnection.ice.loopback': true,
-                },
-              },
-            },
-          },
+          { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
           { name: 'webkit', use: { ...devices['Desktop Safari'] } },
         ]
       : []),

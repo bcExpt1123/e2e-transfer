@@ -59,6 +59,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps ${{ matrix.browsers }}
+      # Firefox gathers no ICE candidates at all on a machine without an IPv6 route. Without camera
+      # permission it uses only the "default" address, and it gives up if the IPv6 probe for that
+      # address fails. A private IPv6 route on a dummy interface lets the probe succeed; nothing is sent over it.
+      - name: Add an IPv6 route for Firefox WebRTC
+        if: runner.os == 'Linux'
+        run: |
+          if ! ip -6 route show default | grep -q .; then
+            sudo sysctl -qw net.ipv6.conf.all.disable_ipv6=0 net.ipv6.conf.default.disable_ipv6=0
+            sudo ip link add e2e0 type dummy
+            sudo ip link set e2e0 up
+            sudo ip -6 addr add fd00:e2e::1/64 dev e2e0 nodad
+            sudo ip -6 route add default via fd00:e2e::2 dev e2e0 metric 2048
+          fi
+          ip -6 route
       - run: pnpm test:e2e ${{ matrix.projects }}
       - if: failure()
         uses: actions/upload-artifact@v4
