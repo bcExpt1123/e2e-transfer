@@ -49,9 +49,12 @@ test.describe('app shell', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 
-  test('a #v1. link opens the receive view', async ({ page }) => {
+  test('a damaged link explains itself and offers a way out', async ({ page }) => {
     await page.goto('./#v1.dGVzdA');
-    await expect(page.getByRole('heading', { name: 'Incoming transfer' })).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText('This link is incomplete or damaged.');
+    expect(new URL(page.url()).hash).toBe(''); // never left in the address bar
+    await page.getByRole('button', { name: 'Send files instead' }).click();
+    await expect(page.getByRole('button', { name: 'Choose files' })).toBeVisible();
   });
 
   test('production build ships a CSP', async ({ page }) => {

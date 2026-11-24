@@ -3,6 +3,7 @@ import { ErrorCode, type TransferError } from '../errors.ts';
 /** Lifecycle shared by Sender and Receiver (docs/ARCHITECTURE.md § Session lifecycle). */
 export type TransferPhase =
   | 'handshaking'
+  | 'connected' // handshake done; sender: confirming the receiver, receiver: waiting for MANIFEST
   | 'awaiting-accept' // sender: waiting for the receiver to review
   | 'reviewing' // receiver: user is looking at the manifest
   | 'transferring'

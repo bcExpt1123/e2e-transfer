@@ -35,6 +35,11 @@ export interface SenderOptions {
   sessionIkm: CryptoKey;
   files: readonly SourceFile[];
   config?: Partial<TransferConfig>;
+  /**
+   * Asked after the secure handshake, before anything about the files is revealed.
+   * Returning false tells the receiver DECLINED (docs/UX.md § Send: Approve).
+   */
+  confirmPeer?: () => boolean | Promise<boolean>;
 }
 
 export class Sender extends Emitter<SenderEvents> {
@@ -58,6 +63,12 @@ export class Sender extends Emitter<SenderEvents> {
     try {
       this.emit('phase', 'handshaking');
       await secure.handshake(this.#opts.sessionIkm);
+      this.emit('phase', 'connected');
+      if (this.#opts.confirmPeer) {
+        const ok = await this.#opts.confirmPeer();
+        if (secure.error) throw secure.error;
+        if (!ok) throw new TransferError(ErrorCode.Declined, 'sender declined the receiver');
+      }
 
       const manifest: Manifest = {
         files: this.#opts.files.map(({ path, size, mime }) => ({ path, size, mime })),

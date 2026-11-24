@@ -25,6 +25,8 @@ export interface TransferConfig {
   signalingMaxSkewMs: number;
   /** Upper bound on files in a manifest. */
   maxFiles: number;
+  /** Receiver: after its final DONE, wait up to this long (ms) for the sender to close. */
+  closeGraceMs: number;
 }
 
 const KiB = 1024;
@@ -39,6 +41,7 @@ export const DEFAULT_CONFIG: Readonly<TransferConfig> = Object.freeze({
   maxUnackedBytes: 16 * MiB,
   signalingMaxSkewMs: 120_000,
   maxFiles: 10_000,
+  closeGraceMs: 3_000,
 });
 
 /** Merge overrides onto defaults and validate invariants. */

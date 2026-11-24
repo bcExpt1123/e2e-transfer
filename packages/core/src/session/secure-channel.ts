@@ -37,6 +37,7 @@ export class SecureChannel {
   #waiters: { resolve: (f: Frame) => void; reject: (e: unknown) => void }[] = [];
   #error?: TransferError;
   #finished = false;
+  #aborted = false;
   #unsubscribe: (() => void)[] = [];
 
   constructor(channel: MessageChannelLike, role: Role, cfg: TransferConfig) {
@@ -161,6 +162,21 @@ export class SecureChannel {
     });
   }
 
+  /** Resolves when the peer closes the channel, or after `timeoutMs`. Never rejects. */
+  peerClosed(timeoutMs: number): Promise<void> {
+    if (this.#ch.closed) return Promise.resolve();
+    this.#finished = true; // a close from here on is the expected end, not CONNECTION_LOST
+    return new Promise((resolve) => {
+      const timer = setTimeout(done, timeoutMs);
+      const off = this.#ch.onClose(done);
+      function done() {
+        clearTimeout(timer);
+        off();
+        resolve();
+      }
+    });
+  }
+
   /** Normal end of session: close without treating the close as an error. */
   finish(): void {
     this.#finished = true;
@@ -168,12 +184,16 @@ export class SecureChannel {
   }
 
   /**
-   * Fatal end of session. Tells the peer (ERROR or CANCEL) when possible, then closes.
+   * Fatal end of session. Tells the peer (ERROR or CANCEL) when possible, then closes
+   * (after a short grace period in which the peer is expected to close first).
    * Returns the normalised error so callers can `throw await channel.abort(err)`.
    */
   async abort(err: unknown): Promise<TransferError> {
     // The first recorded error wins (e.g. a decrypt failure that made the engine abort).
     const error = this.#fail(err);
+    // Already ending (maybe lingering so our ERROR/CANCEL arrives): don't cut that short.
+    if (this.#aborted) return error;
+    this.#aborted = true;
     const fromPeer = (error as TransferError & { fromPeer?: boolean }).fromPeer === true;
     if (
       !this.#finished &&
@@ -187,7 +207,17 @@ export class SecureChannel {
           ? encodeJson({})
           : encodeJson({ code: error.code, message: error.message });
       const type = error.code === ErrorCode.Cancelled ? FrameType.Cancel : FrameType.Error;
-      await this.#enqueue(type, payload, true).catch(() => {});
+      const told = await this.#enqueue(type, payload, true).then(
+        () => true,
+        () => false,
+      );
+      if (told) {
+        // Tearing down right away could drop that frame in flight (closing an
+        // RTCPeerConnection discards queued data). The peer closes once it has read it;
+        // the caller doesn't wait for that.
+        void this.peerClosed(this.#cfg.closeGraceMs).then(() => this.#teardown());
+        return error;
+      }
     }
     this.#finished = true;
     this.#teardown();

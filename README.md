@@ -4,7 +4,7 @@
 
 Open the app and drop in a file. Share the link (or, later, a short code like `7-guitar-orbit`). The bytes go directly from one browser to the other over WebRTC, encrypted with a key that never leaves the two devices.
 
-> Status: **design phase**. This README and [`/docs`](docs/) are the plan. Code follows the [roadmap](docs/ROADMAP.md).
+> Status: **MVP (phase 3)**. Link-based transfers work end to end over WebRTC with Nostr signaling. See the [roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -67,23 +67,27 @@ The reasoning behind these choices is in [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 
 Whoever has the link can receive the file. Treat it like a password and send it over a channel you trust. The link's `#fragment` holds a 256-bit secret, and browsers never send the fragment to a server. Relays see only a topic derived from that secret plus ciphertext. Because signaling is authenticated with the secret, a relay can't swap DTLS fingerprints to put itself in the middle. File data is encrypted and authenticated frame by frame with keys that are fresh for every session. The full threat model, including what this does **not** protect against, is in [docs/SECURITY.md](docs/SECURITY.md).
 
-## Quick start (once Phase 1 has landed)
+## Quick start
 
 ```bash
 pnpm install
 pnpm dev            # http://localhost:5173 (open two windows: send and receive)
 pnpm test           # unit tests
-pnpm test:e2e       # Playwright: real transfer between two browser contexts
-pnpm build          # static output in apps/web/dist
+pnpm build && pnpm test:e2e   # Playwright: real WebRTC transfer between two pages
+pnpm check          # everything CI runs, except e2e
 ```
+
+Signaling uses public Nostr relays by default. To try it offline between two tabs of the same browser, run
+`localStorage.setItem('e2e-transfer.signaling', 'broadcast')` in the console of both tabs. Deployments can set
+`VITE_SIGNALING_RELAYS` (comma-separated `wss://` URLs) and `VITE_ICE_SERVERS` (JSON `RTCIceServer[]`, e.g. with TURN).
 
 ## Repository layout
 
 ```
 apps/web/            Svelte UI: features/{send,receive,settings}, lib/{ui,state,i18n}
 packages/core/       crypto, protocol, transfer engine, ports (adapter interfaces); framework-agnostic
-packages/signaling/  Signaling adapters: memory, then nostr, mqtt, manual
-packages/storage/    FileSink adapters: memory, then fs-access, opfs
+packages/signaling/  Signaling adapters: nostr (default), broadcast (tabs/e2e), memory (tests); mqtt, manual later
+packages/storage/    FileSink adapters: fs-access (chosen folder), opfs, memory
 tests/e2e/           Playwright tests
 docs/                architecture, protocol, security, roadmap, ADRs
 ```

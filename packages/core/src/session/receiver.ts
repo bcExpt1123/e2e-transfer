@@ -60,6 +60,7 @@ export class Receiver extends Emitter<ReceiverEvents> {
     try {
       this.emit('phase', 'handshaking');
       await secure.handshake(this.#opts.sessionIkm);
+      this.emit('phase', 'connected');
 
       const first = await secure.next();
       if (first.type !== FrameType.Manifest) throw unexpectedFrame(first, 'MANIFEST');
@@ -70,6 +71,7 @@ export class Receiver extends Emitter<ReceiverEvents> {
       if (secure.error) throw secure.error;
       if (!decision) {
         await secure.send(FrameType.Reject, encodeJson({}));
+        await secure.peerClosed(this.#cfg.closeGraceMs); // let REJECT arrive before tearing down
         secure.finish();
         this.emit('phase', 'declined');
         return 'declined';
@@ -94,6 +96,8 @@ export class Receiver extends Emitter<ReceiverEvents> {
       if (last.type !== FrameType.Done) throw unexpectedFrame(last, 'DONE');
       this.emit('phase', 'finishing');
       await secure.send(FrameType.Done);
+      // Our DONE must reach the sender before the connection is torn down: let it close first.
+      await secure.peerClosed(this.#cfg.closeGraceMs);
       secure.finish();
       this.emit('phase', 'done');
       return 'completed';

@@ -5,12 +5,14 @@
   "type": "module",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./nostr": "./src/nostr/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."
   },
   "dependencies": {
-    "@e2e-transfer/core": "workspace:*"
+    "@e2e-transfer/core": "workspace:*",
+    "@noble/curves": "2.4.0"
   }
 }

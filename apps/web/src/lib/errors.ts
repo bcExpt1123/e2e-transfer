@@ -27,10 +27,22 @@ export interface ErrorView {
   actions: { id: ErrorAction; label: string }[];
 }
 
-export function describeError(code: ErrorCode, m: Messages): ErrorView {
+/**
+ * Text and actions for an error. `supported` lists the actions the current screen can
+ * perform; others are hidden (e.g. QR and TURN until phase 5). Never returns zero actions:
+ * `fallback` is offered when nothing else applies.
+ */
+export function describeError(
+  code: ErrorCode,
+  m: Messages,
+  supported?: ReadonlySet<ErrorAction>,
+  fallback: ErrorAction = 'startOver',
+): ErrorView {
+  let ids = ERROR_ACTIONS[code].filter((id) => !supported || supported.has(id));
+  if (ids.length === 0) ids = [fallback];
   return {
     code,
     message: m.errors[code],
-    actions: ERROR_ACTIONS[code].map((id) => ({ id, label: m.errorActions[id] })),
+    actions: ids.map((id) => ({ id, label: m.errorActions[id] })),
   };
 }

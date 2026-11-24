@@ -28,7 +28,7 @@ shell scores ≥ 95 on Lighthouse performance and accessibility, and the bundle 
 
 **Done when:** unit tests transfer 3 files (0 B, 1 B, 50 MiB) through the loopback; any tampered, reordered or replayed frame fails; malicious paths are rejected.
 
-## Phase 3: First real transfer (MVP)
+## Phase 3: First real transfer (MVP) ✅ (field test pending)
 
 - `peer.ts`: RTCPeerConnection, trickle ICE, DataChannel and backpressure.
 - `signaling/nostr` adapter and the signaling envelope.
@@ -38,6 +38,14 @@ shell scores ≥ 95 on Lighthouse performance and accessibility, and the bundle 
 - A Playwright e2e test using a `BroadcastChannel` signaling adapter.
 
 **Done when:** two browsers on different networks transfer a 1 GiB file through the deployed site, with constant memory use on the receiver. The e2e test passes in Chromium and Firefox.
+
+Status: the e2e tests pass in Chromium (desktop and mobile) and Firefox, using real WebRTC and OPFS. The
+cross-network 1 GiB run needs the deployed site and two networks, so it is still to do. Notes:
+
+- `peer.ts` is split into `transport/rtc.ts` (DataChannel adapter), `transport/peer.ts` (offer/answer dance),
+  `signaling/envelope.ts` (PROTOCOL §3) and `session/link-session.ts` (one connection attempt end to end).
+- The Nostr adapter speaks NIP-01 directly and uses `@noble/curves` for the signatures. It's a lazy chunk (13 KB gzipped).
+- Not done yet: the browser and OS hint and the verification words on the Approve screen. They move to phase 4.
 
 ## Phase 4: Robustness and reach
 

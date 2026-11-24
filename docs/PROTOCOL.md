@@ -33,8 +33,12 @@ Each signaling message, on any adapter, is:
 
 ```
 envelope   = iv(12, random) ‖ AES-GCM(signalKey, iv, plaintext, aad = "sig/v1")
-plaintext  = JSON { "from": b64u(8 random bytes, per tab), "seq": n, "ts": unix_ms, "t": type, "d": data }
+plaintext  = JSON { "from": b64u(8 random bytes, per tab), "to"?: id, "seq": n, "ts": unix_ms, "t": type, "d": data }
 ```
+
+`to` is the recipient's `from` id. It is absent only on `join`, which is a broadcast. Each side locks onto the
+first peer it hears from (the sender: the first `join`; the receiver: the first `offer`) and ignores everyone
+else, so a second person opening the same link can't take over the session.
 
 | `t`      | Sender of message | `d`                                               |
 | -------- | ----------------- | ------------------------------------------------- |
@@ -45,7 +49,14 @@ plaintext  = JSON { "from": b64u(8 random bytes, per tab), "seq": n, "ts": unix_
 | `bye`    | both              | `{ reason? }`                                     |
 | `pake`   | both (phase 5)    | `{ msg }`                                         |
 
-Receivers drop messages that fail to decrypt, come from themselves, repeat a `(from, seq)` pair already seen, or have `|now − ts| > 120 s`.
+Receivers drop messages that fail to decrypt, come from themselves, are addressed to someone else, repeat a `(from, seq)` pair already seen, or have `|now − ts| > 120 s`.
+
+**Connection setup.** The sender always makes the offer. The receiver sends `join` every 2 s until an `offer`
+arrives (relays may drop messages). A repeated `join` from the locked peer makes the sender resend its offer, and a
+repeated `offer` makes the receiver resend its answer. ICE candidates that arrive before the remote description are
+queued. `bye {reason: "cancelled"}` reports a cancel during setup; any other `bye` counts as a lost connection.
+The receiver gives up after 30 s without an offer (`PEER_TIMEOUT`); either side gives up when ICE fails or the channel
+isn't open 30 s after setup starts (`ICE_FAILED`). Both sides leave the signaling room once the DataChannel is open.
 Because SDP travels inside this authenticated envelope, the DTLS fingerprints are bound to `S`. Someone without the secret can't
 intercept the DataChannel.
 
@@ -114,9 +125,14 @@ the network, incoming frames pile up in its memory. Therefore:
 - Separately, the sender pauses while its own `bufferedAmount` exceeds the high watermark (§5).
 
 **Ending a session.** `CANCEL` and `ERROR` may be sent by either side at any time and end the session at once.
-The receiving side reports the peer's code to the user and does not reply. A side that closes its channel
-lets queued frames (including a final `DONE`, `REJECT`, `CANCEL` or `ERROR`) reach the peer first. A close with no
-terminal frame before it is reported as `CONNECTION_LOST`.
+The receiving side reports the peer's code to the user and does not reply. Closing an `RTCPeerConnection`
+discards data still in flight, so **the side that sends the last frame does not close first**: after sending its final
+`DONE`, a `REJECT`, a `CANCEL` or an `ERROR`, a peer waits up to `closeGraceMs` (3 s) for the other side to close the
+channel, then closes it itself. The side that reads such a frame closes immediately. A close with no terminal frame
+before it is reported as `CONNECTION_LOST`.
+
+**Sender approval.** After `HELLO`, the sender's user confirms the device before anything about the files is sent.
+Declining sends `ERROR {code: "DECLINED"}`.
 
 ### 4.5 Integrity
 
@@ -138,6 +154,10 @@ continues from those offsets.
 | ACK interval              | 1 MiB (maximum) |
 | maxUnackedBytes (window)  | 16 MiB          |
 | Signaling message max age | 120 s           |
+| `join` repeat interval    | 2 s             |
+| Peer timeout (receiver)   | 30 s            |
+| Connect timeout (ICE)     | 30 s            |
+| closeGraceMs              | 3 s             |
 | Max files per manifest    | 10 000          |
 
 ## 6. Short codes with CPace (phase 5, draft)

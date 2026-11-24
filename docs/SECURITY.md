@@ -6,14 +6,14 @@ File contents, file names and sizes, and who is talking to whom.
 
 ## Parties and what each can see
 
-| Party                          | Sees                                                              | Can't                                                                                             |
-| ------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Static host / CDN              | Page requests (IP, user agent)                                    | Read the `#fragment`, the files or signaling. See _Malicious app code_ below                      |
-| Signaling relays (Nostr, MQTT) | IPs, timing, a random-looking topic, ciphertext sizes             | Decrypt SDP, impersonate a peer, or MITM DTLS (envelopes are AEAD-authenticated with `signalKey`) |
-| STUN                           | Your public IP                                                    | Anything else                                                                                     |
-| TURN (if used)                 | Both IPs, traffic volume                                          | Decrypt (DTLS + app-layer AES-GCM)                                                                |
-| Network observer               | Both IPs (once connected peer to peer), traffic volume and timing | Contents                                                                                          |
-| Anyone holding the link        | **Everything the receiver gets**                                  |                                                                                                   |
+| Party                          | Sees                                                                                  | Can't                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Static host / CDN              | Page requests (IP, user agent)                                                        | Read the `#fragment`, the files or signaling. See _Malicious app code_ below                      |
+| Signaling relays (Nostr, MQTT) | IPs, timing, a random-looking topic, ciphertext sizes, a throwaway Nostr key per join | Decrypt SDP, impersonate a peer, or MITM DTLS (envelopes are AEAD-authenticated with `signalKey`) |
+| STUN                           | Your public IP                                                                        | Anything else                                                                                     |
+| TURN (if used)                 | Both IPs, traffic volume                                                              | Decrypt (DTLS + app-layer AES-GCM)                                                                |
+| Network observer               | Both IPs (once connected peer to peer), traffic volume and timing                     | Contents                                                                                          |
+| Anyone holding the link        | **Everything the receiver gets**                                                      |                                                                                                   |
 
 ## Guarantees
 
@@ -28,6 +28,8 @@ File contents, file names and sizes, and who is talking to whom.
   path, not the fragment) lets someone else connect. Mitigations: the sender must confirm the receiver before sending `MANIFEST`; links work for a single receiver unless the sender chooses multi-receiver mode; sessions expire when the sender's tab closes; and a short-code mode is planned.
 - **No forward secrecy against a stolen link.** Anyone with `S` and a recording of the signaling can derive session
   keys. If this matters, a future version can add an ephemeral ECDH inside the DataChannel (tracked in the roadmap).
+- **Signaling metadata.** Nostr relays can link the sender and receiver of one transfer (same topic, close in
+  time). They can't link two transfers to each other: topics are derived from fresh secrets and each join uses a new key.
 - **IP addresses are revealed** to the peer and to relays. Users who need IP privacy should force relay-only ICE (TURN) or use a VPN or Tor.
 - **Malicious app code.** A compromised host could serve JavaScript that steals the key. Mitigations: a strict CSP, Subresource Integrity on any external script (none planned), reproducible builds, release hashes published in the repo, and the ability to self-host or install as a PWA. This is the same limit every web-based E2E tool has.
 - **Endpoint compromise** (malware, malicious extensions) is out of scope.

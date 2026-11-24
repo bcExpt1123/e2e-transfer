@@ -18,3 +18,15 @@ describe('error catalog', () => {
     expect(Object.keys(en.errors).sort()).toEqual([...codes].sort());
   });
 });
+
+describe('describeError with supported actions', () => {
+  it('hides unsupported actions and falls back when none remain', () => {
+    const supported = new Set(['retry', 'tryAgain'] as const);
+    expect(describeError(ErrorCode.SignalingUnreachable, en, supported).actions.map((a) => a.id)).toEqual([
+      'retry',
+    ]);
+    expect(describeError(ErrorCode.IceFailed, en, supported, 'tryAgain').actions).toEqual([
+      { id: 'tryAgain', label: 'Try again' },
+    ]);
+  });
+});

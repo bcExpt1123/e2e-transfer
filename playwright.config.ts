@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
 const isCI = Boolean(process.env.CI);
+/** Firefox/WebKit always run in CI; locally opt in with E2E_ALL_BROWSERS=1 (after `playwright install`). */
+const allBrowsers = isCI || Boolean(process.env.E2E_ALL_BROWSERS);
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -22,7 +24,7 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 7'] } },
-    ...(isCI
+    ...(allBrowsers
       ? [
           { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
           { name: 'webkit', use: { ...devices['Desktop Safari'] } },

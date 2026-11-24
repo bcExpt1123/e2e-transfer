@@ -26,12 +26,13 @@
 └───────────────┬───────────────────────────────────────────────────────────┘
                 │ uses (only via lib/state)
 ┌───────────────▼──────────────── packages/core ────────────────────────────┐
-│  Session (state machine)                                                   │
-│   ├─ keys.ts        secret → HKDF tree (roomTopic, signalKey, sessionKeys) │
-│   ├─ peer.ts        RTCPeerConnection + DataChannel, ICE, backpressure     │
-│   ├─ protocol.ts    frame codec (header + AES-GCM payload)                 │
-│   ├─ sender.ts      reads Files → CHUNK frames                             │
-│   └─ receiver.ts    CHUNK frames → FileSink                                │
+│  keys.ts, link.ts              secret → HKDF tree; `#v1.` links            │
+│  signaling/envelope.ts         encrypted, addressed, replay-safe signaling │
+│  transport/peer.ts, rtc.ts     offer/answer + trickle ICE; DataChannel     │
+│  protocol/                     frames, AES-GCM cipher, manifest checks     │
+│  session/secure-channel.ts     HELLO + per-frame AEAD over a channel       │
+│  session/sender.ts, receiver.ts  the transfer engine                       │
+│  session/link-session.ts       one attempt: join → connect → engine        │
 └───────┬──────────────────────────────────────────────┬────────────────────┘
         │ Signaling interface                          │ FileSink interface
 ┌───────▼──────── packages/signaling ───┐   ┌──────────▼──── packages/storage ┐
@@ -45,20 +46,21 @@ interface types. `core` contains no DOM or UI code apart from the WebRTC and Web
 ## Session lifecycle
 
 ```
-idle ─► joining ─► signaling ─► connecting ─► handshaking ─► awaiting-accept ─► transferring ─► done
+idle ─► joining ─► waiting ─► connecting ─► handshaking ─► connected ─► awaiting-accept/reviewing ─► transferring ─► finishing ─► done
                        │             │              │                 │                 │
                        └─────────────┴──────────────┴─────────────────┴──────► failed / cancelled
 ```
 
-| State           | Sender                                        | Receiver                                       |
-| --------------- | --------------------------------------------- | ---------------------------------------------- |
-| joining         | create secret, join `roomTopic`, show link    | parse `#secret`, join `roomTopic`, send `join` |
-| signaling       | on `join`: create offer                       | wait for offer, reply with answer              |
-| connecting      | ICE / DTLS                                    | ICE / DTLS                                     |
-| handshaking     | exchange `HELLO` nonces → derive session keys | same                                           |
-| awaiting-accept | send `MANIFEST`                               | user accepts → `ACCEPT` (picks sink)           |
-| transferring    | stream `CHUNK`s                               | write to sink, send `ACK`s                     |
-| done            | `DONE` received                               | all files closed                               |
+| State           | Sender                                        | Receiver                                         |
+| --------------- | --------------------------------------------- | ------------------------------------------------ |
+| joining         | create secret, join `roomTopic`, show link    | parse `#secret`, join `roomTopic`, send `join`   |
+| waiting         | on `join`: create offer                       | repeat `join` until the offer; reply with answer |
+| connecting      | ICE / DTLS                                    | ICE / DTLS                                       |
+| handshaking     | exchange `HELLO` nonces → derive session keys | same                                             |
+| connected       | user confirms the device (Approve)            | wait for `MANIFEST`                              |
+| awaiting-accept | send `MANIFEST`                               | user accepts → `ACCEPT` (picks sink)             |
+| transferring    | stream `CHUNK`s                               | write to sink, send `ACK`s                       |
+| done            | `DONE` received                               | all files closed                                 |
 
 Roles are fixed: **the sender always makes the offer**. That avoids glare handling ("perfect negotiation")
 in v1. When the link is opened, the sender's UI asks for confirmation before sending `MANIFEST`, so a leaked link can't silently receive the file.
@@ -80,11 +82,12 @@ export interface SignalingRoom {
 Adapters only move opaque bytes. All encryption, authentication, replay filtering and deduplication happen in `core`
 (see [PROTOCOL.md § Signaling envelope](PROTOCOL.md#3-signaling-envelope)), so a new adapter can't weaken security.
 
-| Adapter           | Transport                                                                          | Notes                                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `nostr` (default) | Ephemeral events (kind 20000–29999) on 3+ public relays, signed by a throwaway key | Redundant: publishes to all relays and dedupes on receipt                                                       |
-| `mqtt`            | `mqtt` over WSS to public brokers, topic `e2e-transfer/v1/<topic>`                 | Fallback when Nostr relays are blocked                                                                          |
-| `manual`          | User copies text or scans a QR code each way                                       | Fully serverless. Uses non-trickle ICE, so the complete SDP is gathered first. Compressed and base64url-encoded |
+| Adapter           | Transport                                                                                             | Notes                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `nostr` (default) | Ephemeral events (kind 25050, tag `t` = topic) on 4 public relays, signed by a throwaway key per join | NIP-01 spoken directly + `@noble/curves`; lazy-loaded. Ready when one relay connects; publishes to all, dedupes by event id |
+| `broadcast`       | `BroadcastChannel` between tabs of one browser profile                                                | Used by the e2e tests; handy for local demos                                                                                |
+| `mqtt`            | `mqtt` over WSS to public brokers, topic `e2e-transfer/v1/<topic>`                                    | Fallback when Nostr relays are blocked                                                                                      |
+| `manual`          | User copies text or scans a QR code each way                                                          | Fully serverless. Uses non-trickle ICE, so the complete SDP is gathered first. Compressed and base64url-encoded             |
 
 ```ts
 // packages/core/src/ports/storage.ts (implemented in packages/storage)

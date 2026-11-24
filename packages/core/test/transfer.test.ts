@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { type Bytes, concat, equalBytes } from '../src/bytes.ts';
 import { DEFAULT_CONFIG, resolveConfig } from '../src/config.ts';
+import { ErrorCode, TransferError } from '../src/errors.ts';
 import {
   bytesSource,
   createLoopbackPair,
@@ -74,7 +75,14 @@ describe('transfer over loopback', () => {
 
     const total = 50 * MiB + 1;
     expect(lastProgress).toEqual({ sent: total, acked: total, total });
-    expect(phases).toEqual(['handshaking', 'awaiting-accept', 'transferring', 'finishing', 'done']);
+    expect(phases).toEqual([
+      'handshaking',
+      'connected',
+      'awaiting-accept',
+      'transferring',
+      'finishing',
+      'done',
+    ]);
     // backpressure: never more than the high watermark plus one frame in flight
     expect(a.stats.maxBufferedAmount).toBeLessThanOrEqual(
       DEFAULT_CONFIG.bufferedAmountHigh + DEFAULT_CONFIG.maxFrameSize,
@@ -261,3 +269,18 @@ function reorder(at: number) {
     return [m];
   };
 }
+
+describe('abort', () => {
+  it('a second abort does not cut short the first one’s goodbye', async () => {
+    const [a, b] = createLoopbackPair();
+    const { sessionIkm } = await deriveLinkKeys(generateSecret());
+    const cfg = resolveConfig();
+    const left = new SecureChannel(a, 'sender', cfg);
+    const right = new SecureChannel(b, 'receiver', cfg);
+    await Promise.all([left.handshake(sessionIkm), right.handshake(sessionIkm)]);
+    const reading = right.next();
+    await left.abort(new TransferError(ErrorCode.Declined, 'no'));
+    await left.abort(new TransferError(ErrorCode.Cancelled));
+    await expect(reading).rejects.toMatchObject({ code: 'DECLINED', fromPeer: true });
+  });
+});

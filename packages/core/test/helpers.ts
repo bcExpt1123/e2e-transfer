@@ -9,6 +9,7 @@ import {
   type Manifest,
   Receiver,
   Sender,
+  type SignalingRoom,
   type SourceFile,
   type TransferConfig,
 } from '../src/index.ts';
@@ -66,4 +67,46 @@ export async function run(sender: Sender, receiver: Receiver) {
 export function codeOf(result: PromiseSettledResult<unknown>): string {
   if (result.status === 'fulfilled') return 'OK';
   return (result.reason as { code?: string }).code ?? String(result.reason);
+}
+
+/**
+ * Minimal in-test signaling topic (core can't depend on packages/signaling).
+ * Like relays: no echo to the author. `log` records every payload; `inject` plays one to everybody.
+ */
+export function memoryRoom(opts: { drop?: (payload: Uint8Array, index: number) => boolean } = {}) {
+  const members = new Set<{ cb: Set<(p: Uint8Array) => void> }>();
+  const log: Uint8Array[] = [];
+  const deliver = (payload: Uint8Array, from?: object) => {
+    for (const m of members) {
+      if (m === from) continue;
+      for (const cb of m.cb) setTimeout(() => cb(payload.slice()), 0);
+    }
+  };
+  return {
+    log,
+    left: 0,
+    inject(payload: Uint8Array) {
+      deliver(payload);
+    },
+    join(): SignalingRoom {
+      const me = { cb: new Set<(p: Uint8Array) => void>() };
+      members.add(me);
+      const room = this;
+      return {
+        async send(payload) {
+          const index = log.push(payload.slice()) - 1;
+          if (opts.drop?.(payload, index)) return;
+          deliver(payload, me);
+        },
+        onMessage(cb) {
+          me.cb.add(cb);
+          return () => me.cb.delete(cb);
+        },
+        async leave() {
+          members.delete(me);
+          room.left++;
+        },
+      };
+    },
+  };
 }

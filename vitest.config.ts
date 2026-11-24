@@ -15,7 +15,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**', 'apps/web/src/**'],
-      exclude: ['**/index.ts', '**/*.d.ts'],
+      exclude: ['**/index.ts', '**/*.d.ts', '**/testing/**'],
       // docs/MAINTAINABILITY.md § Testing pyramid
       thresholds: {
         'packages/core/src/**': { lines: 90 },
