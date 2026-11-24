@@ -32,7 +32,7 @@ test.describe('app shell', () => {
     await expect(list).toHaveCount(0);
   });
 
-  test('settings dialog switches theme and closes with Escape', async ({ page }) => {
+  test('settings dialog switches theme and closes with Escape', async ({ page, browserName }) => {
     await page.goto('./');
     await page.getByRole('button', { name: 'Settings' }).click();
     const dialog = page.getByRole('dialog', { name: 'Settings' });
@@ -43,7 +43,8 @@ test.describe('app shell', () => {
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Settings' })).toBeFocused();
+    // Safari doesn't focus a button on click, so there is no focus to give back there.
+    if (browserName !== 'webkit') await expect(page.getByRole('button', { name: 'Settings' })).toBeFocused();
 
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -100,8 +101,9 @@ test.describe('app shell', () => {
     });
   }
 
-  test('works by keyboard alone: pick files and create the link', async ({ page, browserName }) => {
+  test('works by keyboard alone: pick files and create the link', async ({ page, browserName, isMobile }) => {
     test.skip(browserName === 'webkit', 'WebKit skips buttons when tabbing unless the OS setting is on');
+    test.skip(isMobile, 'touch devices have no Tab key');
     await page.goto('./');
     // Tab until "Choose files" has focus, then open the picker with Enter.
     for (let i = 0; i < 10; i++) {

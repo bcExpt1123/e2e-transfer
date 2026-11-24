@@ -99,7 +99,9 @@ Status:
   "Reconnecting…" announced once; spinners respect reduced motion.
 - **Relay health:** relays and brokers that answer fast are tried first; one that failed twice in a row rests for 30
   minutes (never below two per network).
-- Not verified: WebKit on the macOS CI runner; Share Target and install on a real Android device; a real network
+- Known issue: on the macOS CI runner two Playwright WebKit pages never get past ICE (WebKit hides host
+  candidates without camera access), so CI skips the WebKit transfer tests; run them locally on a Mac.
+- Not verified: Share Target and install on a real Android device; a real network
   switch (Wi-Fi to mobile data) during a transfer, which the closed-connection test only approximates.
 
 ## Later / ideas

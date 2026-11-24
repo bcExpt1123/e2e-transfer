@@ -9,7 +9,13 @@ import { type BrowserContext, expect, type Page, test } from '@playwright/test';
  */
 test.skip(
   ({ browserName }) => browserName === 'webkit' && process.platform === 'linux',
-  'Playwright WebKit on Linux has no WebRTC (CI runs WebKit on macOS)',
+  'Playwright WebKit on Linux has no WebRTC',
+);
+// Known issue (docs/ROADMAP.md): on the macOS CI runner two WebKit pages never get past ICE, because
+// WebKit hides host candidates without camera access and Playwright can't turn that off. Run locally on a Mac.
+test.skip(
+  ({ browserName }) => browserName === 'webkit' && !!process.env.CI,
+  'WebKit WebRTC does not connect on the CI runner',
 );
 
 const sha256 = (b: Buffer) => createHash('sha256').update(b).digest('hex');

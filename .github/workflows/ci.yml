@@ -36,7 +36,8 @@ jobs:
 
   e2e:
     needs: check
-    # Playwright's WebKit has WebRTC on macOS but not on Linux.
+    # Playwright's WebKit has WebRTC on macOS but not on Linux. The WebKit transfer tests are skipped
+    # on CI (tests/e2e/transfer.spec.ts); the app-shell and PWA tests still run there.
     strategy:
       fail-fast: false
       matrix:
