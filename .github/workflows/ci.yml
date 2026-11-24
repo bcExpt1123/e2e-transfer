@@ -38,7 +38,18 @@ jobs:
 
   e2e:
     needs: check
-    runs-on: ubuntu-latest
+    # Playwright's WebKit has WebRTC on macOS but not on Linux.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            browsers: chromium firefox
+            projects: --project=chromium --project=mobile --project=firefox
+          - os: macos-latest
+            browsers: webkit
+            projects: --project=webkit
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -48,12 +59,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium firefox webkit
-      - run: pnpm test:e2e
+      - run: pnpm exec playwright install --with-deps ${{ matrix.browsers }}
+      - run: pnpm test:e2e ${{ matrix.projects }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.os }}
           path: playwright-report
 
   deploy:

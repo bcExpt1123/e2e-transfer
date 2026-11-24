@@ -44,11 +44,15 @@ export class SendController {
   link = $state<string | null>(null);
   /** True while the user is asked to confirm the device that opened the link. */
   confirming = $state(false);
+  /** Who is asking: verification words and the device hint (while confirming). */
+  peer = $state<{ words: readonly string[]; hint?: string } | null>(null);
   done = $state(0);
   total = $state(0);
   rate = $state<RateSnapshot>({ bytesPerSecond: 0, secondsLeft: null });
   error = $state<ErrorCode | null>(null);
   fileCount = $state(0);
+  /** `manual`: offer inside the link, reply pasted back; no relays involved. */
+  mode = $state<'relay' | 'manual'>('relay');
 
   readonly #deps: SendDeps;
   #items: SendItem[] = [];
@@ -71,12 +75,32 @@ export class SendController {
   }
 
   /** Create the secret link and start waiting for the receiver. */
-  share(items: SendItem[]): void {
+  share(items: SendItem[], mode: 'relay' | 'manual' = 'relay'): void {
     if (items.length === 0) return;
     this.#items = items;
     this.fileCount = items.length;
     this.#secret = generateSecret();
-    this.link = encodeLink(this.#deps.baseUrl(), this.#secret);
+    this.#setMode(mode);
+  }
+
+  /** Switch the current share between relay and manual mode (a new link either way). */
+  switchMode(mode: 'relay' | 'manual'): void {
+    if (!this.#secret) return;
+    this.#secret = generateSecret();
+    this.#setMode(mode);
+  }
+
+  /** Manual mode: the reply code pasted from the receiver. False if it doesn't fit. */
+  async submitReply(code: string): Promise<boolean> {
+    return (await this.#session?.acceptReply(code)) ?? false;
+  }
+
+  #setMode(mode: 'relay' | 'manual') {
+    const secret = this.#secret;
+    if (!secret) return;
+    this.mode = mode;
+    // In manual mode the link needs the offer, which takes a moment to prepare.
+    this.link = mode === 'relay' ? encodeLink(this.#deps.baseUrl(), secret) : null;
     this.#attempt();
   }
 
@@ -105,6 +129,7 @@ export class SendController {
     this.#secret = undefined;
     this.#items = [];
     this.link = null;
+    this.mode = 'relay';
     this.phase = 'idle';
     this.error = null;
     this.confirming = false;
@@ -114,6 +139,7 @@ export class SendController {
     const resolve = this.#confirm;
     this.#confirm = undefined;
     this.confirming = false;
+    this.peer = null;
     resolve?.(ok);
   }
 
@@ -127,6 +153,7 @@ export class SendController {
     this.#meter.reset();
     this.rate = { bytesPerSecond: 0, secondsLeft: null };
     this.phase = 'joining';
+    if (this.mode === 'manual') this.link = null;
 
     let declinedByUs = false;
     let session: LinkSender;
@@ -137,8 +164,10 @@ export class SendController {
         rtc: this.#deps.rtc,
         iceServers: iceServers(),
         files: this.#items.map((i) => blobSource(i.file, i.path)),
-        confirmPeer: () =>
+        manual: this.mode === 'manual',
+        confirmPeer: (peer) =>
           new Promise<boolean>((resolve) => {
+            this.peer = peer;
             this.confirming = true;
             this.#confirm = (ok) => {
               declinedByUs = !ok;
@@ -154,6 +183,9 @@ export class SendController {
     this.#session = session;
     session.on('phase', (p) => {
       if (this.#session === session) this.phase = p;
+    });
+    session.on('code', (offer) => {
+      if (this.#session === session) this.link = encodeLink(this.#deps.baseUrl(), secret, offer);
     });
     session.on('progress', ({ acked, total }) => {
       if (this.#session !== session) return;

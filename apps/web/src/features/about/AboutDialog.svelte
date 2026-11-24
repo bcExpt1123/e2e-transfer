@@ -20,6 +20,8 @@
       </li>
     {/each}
   </ol>
+  <h3 class="mt-5 text-sm font-semibold">{m.about.turnTitle}</h3>
+  <p class="mt-1 text-sm text-muted">{m.about.turn}</p>
   <p class="mt-5 flex gap-2 rounded-md bg-surface-2 p-3 text-sm text-muted">
     <ShieldCheck class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
     {m.about.note}

@@ -39,3 +39,16 @@ describe('secret links', () => {
     expect(() => parseLinkFragment(hash)).toThrow(expect.objectContaining({ code: 'LINK_INVALID' }));
   });
 });
+
+describe('manual links', () => {
+  it('carries an optional offer code', async () => {
+    const { encodeLink, parseLink, generateSecret } = await import('../src/index.ts');
+    const secret = generateSecret();
+    const link = encodeLink('https://a.example/', secret, 'abc_-123');
+    expect(parseLink(new URL(link).hash)).toEqual({ secret, offer: 'abc_-123' });
+    expect(parseLink(new URL(encodeLink('https://a.example/', secret)).hash)).toEqual({ secret });
+    for (const bad of [`${new URL(link).hash}.extra`, `${new URL(link).hash.slice(0, -3)}!!!`]) {
+      expect(() => parseLink(bad)).toThrow(expect.objectContaining({ code: 'LINK_INVALID' }));
+    }
+  });
+});

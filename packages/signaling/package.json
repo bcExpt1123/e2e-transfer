@@ -6,7 +6,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./nostr": "./src/nostr/index.ts"
+    "./nostr": "./src/nostr/index.ts",
+    "./mqtt": "./src/mqtt/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p ."

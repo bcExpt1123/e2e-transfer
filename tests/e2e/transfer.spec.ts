@@ -7,7 +7,10 @@ import { type BrowserContext, expect, type Page, test } from '@playwright/test';
  * Real WebRTC between two pages. Signaling uses BroadcastChannel (same browser
  * context) instead of public relays, so the test is hermetic (docs/ARCHITECTURE.md § Testing strategy).
  */
-test.skip(({ browserName }) => browserName === 'webkit', 'Playwright WebKit on Linux has no WebRTC');
+test.skip(
+  ({ browserName }) => browserName === 'webkit' && process.platform === 'linux',
+  'Playwright WebKit on Linux has no WebRTC (CI runs WebKit on macOS)',
+);
 
 const sha256 = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
@@ -28,6 +31,12 @@ async function connectAndApprove(sender: Page, receiver: Page, link: string) {
   await receiver.goto(link);
   expect(new URL(receiver.url()).hash).toBe(''); // secret stripped from the address bar
   await expect(sender.getByRole('heading', { name: 'A device opened your link' })).toBeVisible();
+  // Both screens show the same four verification words.
+  const words = (page: Page) =>
+    page.getByTestId('verification-words').getByRole('listitem').allTextContents();
+  await expect(receiver.getByTestId('verification-words').getByRole('listitem')).toHaveCount(4);
+  expect(await words(sender)).toEqual(await words(receiver));
+  await expect(sender.getByText(/It says it’s \w+ on \w+\./)).toBeVisible();
   await sender.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(receiver.getByRole('heading', { name: 'Incoming files' })).toBeVisible();
 }
@@ -117,5 +126,53 @@ test.describe('transfer between two browsers', () => {
     expect((await axe(sender)).violations).toEqual([]);
     await connectAndApprove(sender, receiver, link);
     expect((await axe(receiver)).violations).toEqual([]);
+  });
+
+  test('connects manually: offer in the link, reply code pasted back', async ({ browser }) => {
+    // Separate contexts: no BroadcastChannel, no relays — the codes are the only channel.
+    const a = await browser.newContext();
+    const b = await browser.newContext();
+    for (const c of [a, b]) {
+      await c.addInitScript(() => localStorage.setItem('e2e-transfer.signaling', 'offline-test'));
+      await c.route(/^wss?:/, (route) => route.abort());
+    }
+    const sender = await a.newPage();
+    const receiver = await b.newPage();
+    const payload = randomBytes(500_000);
+    await sender.goto('./');
+    await sender
+      .getByTestId('file-input')
+      .setInputFiles([{ name: 'm.bin', mimeType: 'application/octet-stream', buffer: payload }]);
+    await sender.getByRole('button', { name: 'Create link' }).click();
+    await sender.getByRole('button', { name: 'No internet relay? Connect manually' }).click();
+    await expect(sender.getByRole('heading', { name: 'Connect manually' })).toBeVisible();
+    // gathering ICE candidates takes up to 3 s (longer when STUN is unreachable, as here)
+    await expect(sender.getByRole('img', { name: 'QR code of the secret link' })).toBeVisible({
+      timeout: 15_000,
+    });
+    const link = await sender.getByRole('textbox', { name: 'Secret link' }).inputValue();
+    expect(link).toMatch(/#v1\.[\w-]{43}\.[\w-]+$/);
+
+    await receiver.goto(link);
+    const replyField = receiver.getByRole('textbox', { name: 'Reply code' });
+    await expect(replyField).toBeVisible({ timeout: 15_000 });
+    const reply = await replyField.inputValue();
+    expect(reply.length).toBeGreaterThan(50);
+
+    const replyBox = sender.getByRole('textbox', { name: 'Reply code from the other device' });
+    await replyBox.fill('not-a-reply');
+    await sender.getByRole('button', { name: 'Connect' }).click();
+    await expect(sender.getByRole('alert')).toContainText('doesn’t fit this link');
+    await replyBox.fill(reply);
+    await sender.getByRole('button', { name: 'Connect' }).click();
+
+    await sender.getByRole('button', { name: 'Send', exact: true }).click();
+    const downloading = receiver.waitForEvent('download');
+    await receiver.getByRole('button', { name: 'Accept & download' }).click();
+    const download = await downloading;
+    expect(sha256(await readFile((await download.path()) ?? ''))).toBe(sha256(payload));
+    await expect(sender.getByRole('heading', { name: 'Delivered' })).toBeVisible();
+    await a.close();
+    await b.close();
   });
 });

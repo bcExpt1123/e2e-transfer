@@ -8,6 +8,7 @@
   import { formatBytes } from '../../lib/format.ts';
   import { i18n } from '../../lib/i18n/index.svelte.ts';
   import type { SendController } from '../../lib/state/send.svelte.ts';
+  import { appUi, settings } from '../../lib/state/settings.svelte.ts';
   import { statusLine, transferDetail } from '../../lib/transfer-text.ts';
   import { Button, Card, ErrorPanel, FileList, StatusStepper, TransferPanel } from '../../lib/ui/index.ts';
   import ApproveCard from './ApproveCard.svelte';
@@ -24,7 +25,16 @@
   const total = $derived(picked.reduce((sum, p) => sum + p.file.size, 0));
   const summary = $derived(m.send.summary(ctrl.fileCount || picked.length, formatBytes(ctrl.total || total)));
 
-  const SUPPORTED = new Set<ErrorAction>(['retry', 'tryAgain', 'keepWaiting', 'startOver', 'reload']);
+  const SUPPORTED = new Set<ErrorAction>([
+    'retry',
+    'tryAgain',
+    'keepWaiting',
+    'startOver',
+    'reload',
+    'configureTurn',
+    'learnMore',
+    'useQr',
+  ]);
   const errorView = $derived(ctrl.error ? describeError(ctrl.error, m, SUPPORTED) : null);
 
   const view = $derived.by(() => {
@@ -53,7 +63,10 @@
   }
 
   function onaction(id: string) {
-    if (id === 'reload') location.reload();
+    if (id === 'configureTurn') appUi.settingsOpen = true;
+    else if (id === 'learnMore') appUi.aboutOpen = true;
+    else if (id === 'reload') location.reload();
+    else if (id === 'useQr') ctrl.switchMode('manual');
     else if (id === 'startOver') ctrl.reset();
     else ctrl.retry();
   }
@@ -105,10 +118,18 @@
       {m.send.trust}
     </p>
   </div>
-{:else if view === 'share' && ctrl.link}
-  <ShareCard link={ctrl.link} phase={ctrl.phase} {summary} onstop={() => ctrl.reset()} />
+{:else if view === 'share'}
+  <ShareCard
+    link={ctrl.link}
+    phase={ctrl.phase}
+    mode={ctrl.mode}
+    {summary}
+    onstop={() => ctrl.reset()}
+    onswitch={(mode) => ctrl.switchMode(mode)}
+    onreply={(code) => ctrl.submitReply(code)}
+  />
 {:else if view === 'approve'}
-  <ApproveCard {summary} onsend={() => ctrl.approve()} ondecline={() => ctrl.decline()} />
+  <ApproveCard {summary} words={ctrl.peer?.words ?? []} hint={ctrl.peer?.hint} onsend={() => ctrl.approve()} ondecline={() => ctrl.decline()} />
 {:else if view === 'accepting'}
   <Card class="flex flex-col gap-4">
     <StatusStepper
@@ -146,6 +167,6 @@
   </Card>
 {:else if errorView}
   <Card>
-    <ErrorPanel title={m.errorTitle} message={errorView.message} actions={errorView.actions} {onaction} />
+    <ErrorPanel title={m.errorTitle} message={errorView.code === 'ICE_FAILED' && settings.hasTurn ? m.iceFailedWithTurn : errorView.message} actions={errorView.actions} {onaction} />
   </Card>
 {/if}

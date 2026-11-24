@@ -54,6 +54,7 @@ const registry = new Map<string, FakePeer>();
 export class FakePeer extends EventTarget implements RtcPeerLike {
   readonly id = `fake:${nextId++}`;
   connectionState: RTCPeerConnectionState = 'new';
+  iceGatheringState: RTCIceGatheringState = 'new';
   local: RTCSessionDescriptionInit | undefined;
   remote: RTCSessionDescriptionInit | undefined;
   remoteCandidates = 0;
@@ -84,12 +85,23 @@ export class FakePeer extends EventTarget implements RtcPeerLike {
     this.local = d;
     this.#maybeGather();
   }
+  /** Like browsers: once gathering completes, the local SDP carries the candidates. */
+  get localDescription() {
+    if (!this.local) return null;
+    const lines = [this.id];
+    if (this.iceGatheringState === 'complete') lines.push(`a=candidate:cand:${this.id}`);
+    return { sdp: lines.join('\r\n') };
+  }
   async setRemoteDescription(d: RTCSessionDescriptionInit) {
-    const other = registry.get(d.sdp ?? '');
+    const [id = '', ...rest] = (d.sdp ?? '').split('\r\n');
+    const other = registry.get(id);
     if (!other) throw new Error('unknown remote description');
     this.remote = d;
     this.other = other;
+    // Non-trickle (manual) mode: candidates arrive inside the SDP.
+    if (rest.includes(`a=candidate:cand:${other.id}`)) this.remoteCandidates++;
     this.#maybeGather();
+    this.#maybeConnect();
   }
   async addIceCandidate(c: RTCIceCandidateInit) {
     if (!this.remote) throw new Error('candidate before remote description');
@@ -104,13 +116,18 @@ export class FakePeer extends EventTarget implements RtcPeerLike {
   }
 
   #maybeGather() {
-    if (!this.local || !this.remote || this.#candidatesSent) return;
+    // Real agents gather as soon as the local description is set; trickled candidates
+    // are only useful to the peer once it knows us, so keep the old ordering for those.
+    if (!this.local || this.#candidatesSent) return;
     this.#candidatesSent = true;
+    this.iceGatheringState = 'gathering';
     const candidate = { candidate: `cand:${this.id}`, sdpMid: '0', sdpMLineIndex: 0 };
     setTimeout(() => {
       const ev = Object.assign(new Event('icecandidate'), { candidate: { toJSON: () => candidate } });
       this.dispatchEvent(ev);
       // end-of-candidates
+      this.iceGatheringState = 'complete';
+      this.dispatchEvent(new Event('icegatheringstatechange'));
       this.dispatchEvent(Object.assign(new Event('icecandidate'), { candidate: null }));
     }, 0);
   }

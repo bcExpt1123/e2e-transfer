@@ -22,6 +22,10 @@ File contents, file names and sizes, and who is talking to whom.
 3. **Exact delivery**: per-frame AEAD with strict counters rejects tampering, reordering, replay, truncation and duplication.
 4. **Fresh keys per session**: frame keys mix random nonces from both peers, so a resumed session never reuses a nonce.
 
+5. **Leaked-link check**: the sender approves each device after a verified handshake, seeing four verification
+   words that match the receiver's screen only within that session. The device hint ("Firefox on Android") is
+   self-reported and only a convenience.
+
 ## Explicit non-guarantees
 
 - **The link is a bearer credential.** Leaking it (chat history, screenshots, link previews that fetch only the

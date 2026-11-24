@@ -5,10 +5,11 @@ Strings are UTF-8. `b64u` is base64url without padding.
 
 ## 1. Shared secret
 
-| Mode                | How the secret `S` (32 bytes) is established                  |
-| ------------------- | ------------------------------------------------------------- |
-| Link (phase 3, MVP) | Sender: `S = random(32)`. Link: `https://<app>/#v1.<b64u(S)>` |
-| Code (phase 5)      | Code `N-word-word`. Both sides run CPace (see §6); `S = ISK`  |
+| Mode                | How the secret `S` (32 bytes) is established                                   |
+| ------------------- | ------------------------------------------------------------------------------ |
+| Link (phase 3, MVP) | Sender: `S = random(32)`. Link: `https://<app>/#v1.<b64u(S)>`                  |
+| Manual (phase 4)    | Same `S`; the link also carries the offer: `#v1.<b64u(S)>.<offer code>` (§3.1) |
+| Code (phase 5)      | Code `N-word-word`. Both sides run CPace (see §6); `S = ISK`                   |
 
 The fragment is read by the page script and then removed from the address bar with `history.replaceState`.
 
@@ -22,7 +23,12 @@ signalKey   = HKDF-Expand(PRK, "signal", 32)               // AES-256-GCM, signa
 sessionPRK  = HKDF-Extract(salt = nonceS ‖ nonceR, IKM = HKDF-Expand(PRK, "session", 32))
 keyS2R      = HKDF-Expand(sessionPRK, "s2r", 32)           // sender → receiver frames
 keyR2S      = HKDF-Expand(sessionPRK, "r2s", 32)           // receiver → sender frames
+sas         = HKDF-Expand(sessionPRK, "sas", 4)            // 4 verification words, 1 byte each
 ```
+
+The verification words index a fixed 256-word list (`SAS_WORDS` in `core/src/sas.ts`). Both screens show them
+after `HELLO`. They match only between the two ends of one session, so the sender can confirm they are talking
+to the intended person and not to someone who obtained a leaked link.
 
 `nonceS` and `nonceR` are fresh 16-byte random values sent by each side in `HELLO`. Every connection attempt,
 including a resume, therefore gets new frame keys, and counters can safely restart at 0.
@@ -40,25 +46,38 @@ plaintext  = JSON { "from": b64u(8 random bytes, per tab), "to"?: id, "seq": n, 
 first peer it hears from (the sender: the first `join`; the receiver: the first `offer`) and ignores everyone
 else, so a second person opening the same link can't take over the session.
 
-| `t`      | Sender of message | `d`                                               |
-| -------- | ----------------- | ------------------------------------------------- |
-| `join`   | receiver          | `{}`                                              |
-| `offer`  | sender            | `{ sdp }`                                         |
-| `answer` | receiver          | `{ sdp }`                                         |
-| `ice`    | both              | `{ candidate }` (trickle; omitted in manual mode) |
-| `bye`    | both              | `{ reason? }`                                     |
-| `pake`   | both (phase 5)    | `{ msg }`                                         |
+| `t`      | Sender of message | `d`                                                                                           |
+| -------- | ----------------- | --------------------------------------------------------------------------------------------- |
+| `join`   | receiver          | `{ hint? }`: short device description, e.g. "Firefox on Android" (unauthenticated decoration) |
+| `offer`  | sender            | `{ sdp }`                                                                                     |
+| `answer` | receiver          | `{ sdp }`                                                                                     |
+| `ice`    | both              | `{ candidate }` (trickle; omitted in manual mode)                                             |
+| `bye`    | both              | `{ reason? }`                                                                                 |
+| `pake`   | both (phase 5)    | `{ msg }`                                                                                     |
 
 Receivers drop messages that fail to decrypt, come from themselves, are addressed to someone else, repeat a `(from, seq)` pair already seen, or have `|now − ts| > 120 s`.
 
 **Connection setup.** The sender always makes the offer. The receiver sends `join` every 2 s until an `offer`
 arrives (relays may drop messages). A repeated `join` from the locked peer makes the sender resend its offer, and a
 repeated `offer` makes the receiver resend its answer. ICE candidates that arrive before the remote description are
-queued. `bye {reason: "cancelled"}` reports a cancel during setup; any other `bye` counts as a lost connection.
+queued, including candidates that overtake the offer on the relays (buffered per author). `bye {reason: "cancelled"}` reports a cancel during setup; any other `bye` counts as a lost connection.
 The receiver gives up after 30 s without an offer (`PEER_TIMEOUT`); either side gives up when ICE fails or the channel
 isn't open 30 s after setup starts (`ICE_FAILED`). Both sides leave the signaling room once the DataChannel is open.
 Because SDP travels inside this authenticated envelope, the DTLS fingerprints are bound to `S`. Someone without the secret can't
 intercept the DataChannel.
+
+### 3.1 Manual connect (no signaling network)
+
+```
+offer code = b64u( iv(12) ‖ AES-GCM(signalKey, iv, deflate-raw(SDP offer),  aad = "manual/v1/offer") )
+reply code = b64u( iv(12) ‖ AES-GCM(signalKey, iv, deflate-raw(SDP answer), aad = "manual/v1/answer") )
+```
+
+ICE is not trickled: each side waits for candidate gathering to complete (at most 3 s) and sends one SDP with
+all candidates. The offer code goes into the link (§1). Opening the link produces the reply code, which the
+user brings back to the sender (copy and paste, or a QR code where the browser can scan one). A code that fails
+to decrypt is refused without ending the session, so the user can paste again. The ICE timeout on the sender
+starts only once the reply is applied; the receiver waits without a timeout.
 
 ## 4. DataChannel
 
@@ -158,6 +177,7 @@ continues from those offsets.
 | Peer timeout (receiver)   | 30 s            |
 | Connect timeout (ICE)     | 30 s            |
 | closeGraceMs              | 3 s             |
+| ICE gathering (manual)    | 3 s (maximum)   |
 | Max files per manifest    | 10 000          |
 
 ## 6. Short codes with CPace (phase 5, draft)

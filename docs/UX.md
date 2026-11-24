@@ -58,8 +58,15 @@ Settings (relays, STUN/TURN, theme, language) and "How it works" open as dialogs
 
 ### Send: Approve
 
-A card reads: "A device opened your link. Send 3 files to it?". It shows the browser and OS from the receiver's HELLO hint, plus optional
-verification words (`apple · river · tango · seven`) that both screens display. Buttons: **Send** / **Decline**.
+A card reads: "A device opened your link. Send 3 files to it?". It shows the browser and OS the receiver reported
+(in its encrypted `join`), plus four verification words (`apple · river · tango · seven`) that the receiver's screen
+shows too. Buttons: **Send** / **Decline**. Declining keeps the link open for the right person.
+
+### Send: Connect manually
+
+Offered on the Share screen ("No internet relay? Connect manually") and as the action for `SIGNALING_UNREACHABLE`.
+The link now carries the sender's offer and is shown as a QR code. Opening it on the other device shows a reply
+code (text and QR) to bring back; the sender pastes it, or scans it where the browser supports `BarcodeDetector`.
 
 ### Receive: Review
 
@@ -99,18 +106,18 @@ Tone: plain, short and calm. Say "the other device", not "peer". Say "connection
 
 Core emits typed `ErrorCode`s, and `apps/web/src/lib/errors.ts` is the **only** place that maps codes to text and actions.
 
-| Code                    | Message                                          | Primary action                        |
-| ----------------------- | ------------------------------------------------ | ------------------------------------- |
-| `SIGNALING_UNREACHABLE` | "Can't reach the matchmaking network."           | Retry · Use QR instead                |
-| `PEER_TIMEOUT`          | "The other device hasn't connected yet."         | Keep waiting · Copy link again        |
-| `ICE_FAILED`            | "Your networks block direct connections."        | Configure a relay (TURN) · Learn more |
-| `CONNECTION_LOST`       | "The connection to the other device was lost."   | Try again (resume in phase 6)         |
-| `LINK_INVALID`          | "This link is incomplete or damaged."            | Ask the sender for a new link         |
-| `DECLINED`              | "The other device declined."                     | Start over                            |
-| `PROTOCOL_ERROR`        | "The transfer was interrupted for safety."       | Try again                             |
-| `STORAGE_QUOTA`         | "Not enough space to save these files."          | Choose another folder                 |
-| `CANCELLED`             | "Transfer cancelled."                            | Start over                            |
-| `VERSION_MISMATCH`      | "The other device uses an incompatible version." | Reload the page                       |
+| Code                    | Message                                                                    | Primary action                                    |
+| ----------------------- | -------------------------------------------------------------------------- | ------------------------------------------------- |
+| `SIGNALING_UNREACHABLE` | "Can't reach the matchmaking network."                                     | Retry · Use QR instead                            |
+| `PEER_TIMEOUT`          | "The other device hasn't connected yet."                                   | Keep waiting · Copy link again                    |
+| `ICE_FAILED`            | "Your networks block direct connections. A relay server (TURN) is needed." | Configure a relay (TURN) · Try again · Learn more |
+| `CONNECTION_LOST`       | "The connection to the other device was lost."                             | Try again (resume in phase 6)                     |
+| `LINK_INVALID`          | "This link is incomplete or damaged."                                      | Ask the sender for a new link                     |
+| `DECLINED`              | "The other device declined."                                               | Start over                                        |
+| `PROTOCOL_ERROR`        | "The transfer was interrupted for safety."                                 | Try again                                         |
+| `STORAGE_QUOTA`         | "Not enough space to save these files."                                    | Choose another folder                             |
+| `CANCELLED`             | "Transfer cancelled."                                                      | Start over                                        |
+| `VERSION_MISMATCH`      | "The other device uses an incompatible version."                           | Reload the page                                   |
 
 ## Visual design
 

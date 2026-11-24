@@ -31,9 +31,12 @@
       "gzip": true
     },
     {
-      "name": "nostr signaling (lazy)",
-      "path": "apps/web/dist/assets/nostr-*.js",
-      "limit": "20 KB",
+      "name": "lazy chunks (signaling, QR, dialogs)",
+      "path": [
+        "apps/web/dist/assets/*.js",
+        "!apps/web/dist/assets/index-*.js"
+      ],
+      "limit": "30 KB",
       "gzip": true
     },
     {

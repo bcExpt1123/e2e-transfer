@@ -26,6 +26,14 @@ export interface SenderProgress {
   total: number;
 }
 
+/** What the user can check about the other device before trusting it. */
+export interface PeerInfo {
+  /** Verification words; the same on both screens only within one session. */
+  words: readonly string[];
+  /** Browser and OS the other device reported, e.g. "Firefox on Android" (unverified). */
+  hint?: string;
+}
+
 export type SenderEvents = {
   phase: TransferPhase;
   progress: SenderProgress;
@@ -39,7 +47,7 @@ export interface SenderOptions {
    * Asked after the secure handshake, before anything about the files is revealed.
    * Returning false tells the receiver DECLINED (docs/UX.md § Send: Approve).
    */
-  confirmPeer?: () => boolean | Promise<boolean>;
+  confirmPeer?: (peer: PeerInfo) => boolean | Promise<boolean>;
 }
 
 export class Sender extends Emitter<SenderEvents> {
@@ -65,7 +73,7 @@ export class Sender extends Emitter<SenderEvents> {
       await secure.handshake(this.#opts.sessionIkm);
       this.emit('phase', 'connected');
       if (this.#opts.confirmPeer) {
-        const ok = await this.#opts.confirmPeer();
+        const ok = await this.#opts.confirmPeer({ words: secure.words });
         if (secure.error) throw secure.error;
         if (!ok) throw new TransferError(ErrorCode.Declined, 'sender declined the receiver');
       }

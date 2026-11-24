@@ -5,6 +5,7 @@
   import { i18n, type Locale, locales } from '../../lib/i18n/index.svelte.ts';
   import { type ThemePref, theme } from '../../lib/theme.svelte.ts';
   import { Dialog } from '../../lib/ui/index.ts';
+  import NetworkSettings from './NetworkSettings.svelte';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
@@ -52,5 +53,12 @@
         {/each}
       </select>
     </label>
+
+    <section class="flex flex-col gap-3 border-t border-border pt-5">
+      <h3 class="font-semibold">{m.settings.network}</h3>
+      {#if open}
+        <NetworkSettings />
+      {/if}
+    </section>
   </div>
 </Dialog>

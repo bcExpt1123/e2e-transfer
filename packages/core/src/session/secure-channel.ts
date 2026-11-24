@@ -18,6 +18,7 @@ import {
   protocolError,
   type Role,
 } from '../protocol/frames.ts';
+import { verificationWords } from '../sas.ts';
 import type { MessageChannelLike } from '../transport/channel.ts';
 
 export class SecureChannel {
@@ -39,6 +40,7 @@ export class SecureChannel {
   #finished = false;
   #aborted = false;
   #unsubscribe: (() => void)[] = [];
+  #words: string[] = [];
 
   constructor(channel: MessageChannelLike, role: Role, cfg: TransferConfig) {
     this.#ch = channel;
@@ -67,6 +69,11 @@ export class SecureChannel {
     );
   }
 
+  /** Four verification words, identical on both peers of this session (after handshake). */
+  get words(): readonly string[] {
+    return this.#words;
+  }
+
   get error(): TransferError | undefined {
     return this.#error;
   }
@@ -86,7 +93,11 @@ export class SecureChannel {
     if (peer.role === this.#role) throw this.#fail(protocolError(`both peers claim role ${peer.role}`));
 
     const [nonceS, nonceR] = this.#role === 'sender' ? [nonce, peer.nonce] : [peer.nonce, nonce];
-    const keys = await deriveSessionKeys(sessionIkm, nonceS, nonceR);
+    const [keys, words] = await Promise.all([
+      deriveSessionKeys(sessionIkm, nonceS, nonceR),
+      verificationWords(sessionIkm, nonceS, nonceR),
+    ]);
+    this.#words = words;
     const [txKey, rxKey] = this.#role === 'sender' ? [keys.s2r, keys.r2s] : [keys.r2s, keys.s2r];
     this.#tx = new FrameCipher(txKey, this.#cfg.maxFrameSize);
     this.#rx = new FrameCipher(rxKey, this.#cfg.maxFrameSize);

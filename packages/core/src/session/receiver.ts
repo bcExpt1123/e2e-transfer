@@ -27,6 +27,8 @@ export interface ReceiverProgress {
 
 export type ReceiverEvents = {
   phase: TransferPhase;
+  /** Verification words to show while the sender decides (emitted before 'connected'). */
+  words: readonly string[];
   progress: ReceiverProgress;
 };
 
@@ -60,6 +62,7 @@ export class Receiver extends Emitter<ReceiverEvents> {
     try {
       this.emit('phase', 'handshaking');
       await secure.handshake(this.#opts.sessionIkm);
+      this.emit('words', secure.words);
       this.emit('phase', 'connected');
 
       const first = await secure.next();

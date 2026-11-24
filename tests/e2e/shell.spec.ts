@@ -57,6 +57,27 @@ test.describe('app shell', () => {
     await expect(page.getByRole('button', { name: 'Choose files' })).toBeVisible();
   });
 
+  test('network settings validate input and persist', async ({ page }) => {
+    await page.goto('./');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Settings' });
+    await dialog.getByLabel('Nostr relays').fill('http://not-secure.example');
+    await dialog.getByRole('button', { name: 'Save network settings' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('wss://');
+
+    await dialog.getByLabel('Nostr relays').fill('wss://relay.example.org');
+    await dialog.getByLabel('TURN address').fill('turns:turn.example.org:443');
+    await dialog.getByLabel('Username').fill('me');
+    await dialog.getByLabel('Password').fill('secret');
+    await dialog.getByRole('button', { name: 'Save network settings' }).click();
+    await expect(page.getByText('Network settings saved')).toBeVisible();
+
+    await page.reload();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.getByLabel('TURN address')).toHaveValue('turns:turn.example.org:443');
+    await expect(page.getByLabel('Nostr relays')).toHaveValue('wss://relay.example.org');
+  });
+
   test('production build ships a CSP', async ({ page }) => {
     await page.goto('./');
     const csp = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');

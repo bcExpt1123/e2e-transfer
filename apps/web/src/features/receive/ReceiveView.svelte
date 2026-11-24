@@ -9,8 +9,18 @@
   import { baseName } from '../../lib/state/browser.ts';
   import { incoming } from '../../lib/state/link.svelte.ts';
   import type { ReceiveController, SaveTarget } from '../../lib/state/receive.svelte.ts';
+  import { appUi, settings } from '../../lib/state/settings.svelte.ts';
   import { connectStep, statusLine, transferDetail } from '../../lib/transfer-text.ts';
-  import { Button, Card, ErrorPanel, StatusStepper, TransferPanel } from '../../lib/ui/index.ts';
+  import {
+    Button,
+    Card,
+    CopyField,
+    ErrorPanel,
+    QrCode,
+    StatusStepper,
+    TransferPanel,
+    VerificationWords,
+  } from '../../lib/ui/index.ts';
   import ReviewCard from './ReviewCard.svelte';
 
   let { ctrl }: { ctrl: ReceiveController } = $props();
@@ -54,7 +64,9 @@
   );
 
   function onaction(id: string) {
-    if (id === 'reload') location.reload();
+    if (id === 'configureTurn') appUi.settingsOpen = true;
+    else if (id === 'learnMore') appUi.aboutOpen = true;
+    else if (id === 'reload') location.reload();
     else if (id === 'askNewLink') sendInstead();
     else void ctrl.start();
   }
@@ -83,6 +95,26 @@
       label={m.receive.connecting}
     />
     <p class="text-sm text-muted">{statusLine(m, ctrl.phase, 'receiver')}</p>
+    {#if ctrl.manual && ctrl.phase === 'waiting'}
+      <section class="flex flex-col gap-3 border-t border-border pt-4" aria-labelledby="reply-title">
+        <h2 id="reply-title" class="font-semibold">{m.receive.replyTitle}</h2>
+        {#if ctrl.replyCode}
+          <p class="text-sm text-muted">{m.receive.replyHint}</p>
+          <CopyField
+            value={ctrl.replyCode}
+            label={m.receive.replyLabel}
+            copyLabel={m.share.copy}
+            copiedLabel={m.share.copied}
+          />
+          <QrCode value={ctrl.replyCode} label={m.receive.replyQr} />
+        {:else}
+          <p class="text-sm text-muted" role="status">{m.receive.preparingReply}</p>
+        {/if}
+      </section>
+    {/if}
+    {#if ctrl.phase === 'connected' && ctrl.words.length > 0}
+      <VerificationWords words={ctrl.words} label={m.receive.words} />
+    {/if}
   </Card>
 {:else if view === 'review' && ctrl.manifest}
   <ReviewCard
@@ -147,7 +179,7 @@
   </Card>
 {:else if errorView}
   <Card class="flex flex-col gap-4">
-    <ErrorPanel title={m.errorTitle} message={errorView.message} actions={errorView.actions} {onaction} />
+    <ErrorPanel title={m.errorTitle} message={errorView.code === 'ICE_FAILED' && settings.hasTurn ? m.iceFailedWithTurn : errorView.message} actions={errorView.actions} {onaction} />
     <Button variant="ghost" class="self-start" onclick={sendInstead}>{m.receive.sendInstead}</Button>
   </Card>
 {/if}

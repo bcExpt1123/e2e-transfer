@@ -2,15 +2,14 @@
   import CircleHelp from '@lucide/svelte/icons/circle-help';
   import Settings from '@lucide/svelte/icons/settings';
   import { Toaster } from 'svelte-sonner';
-  import AboutDialog from './features/about/AboutDialog.svelte';
   import ReceiveView from './features/receive/ReceiveView.svelte';
   import SendView from './features/send/SendView.svelte';
-  import SettingsDialog from './features/settings/SettingsDialog.svelte';
   import { i18n } from './lib/i18n/index.svelte.ts';
   import { ScreenWakeLock } from './lib/state/browser.ts';
   import { incoming } from './lib/state/link.svelte.ts';
   import { ReceiveController } from './lib/state/receive.svelte.ts';
   import { SendController } from './lib/state/send.svelte.ts';
+  import { appUi } from './lib/state/settings.svelte.ts';
   import { theme } from './lib/theme.svelte.ts';
   import { AppHeader, Button } from './lib/ui/index.ts';
 
@@ -33,9 +32,18 @@
     }
   }
 
-  let settingsOpen = $state(false);
-  let aboutOpen = $state(false);
   const toasterTheme = $derived(theme.pref);
+
+  // Dialogs are loaded on first open: most visits never need them.
+  const loadSettings = () => import('./features/settings/SettingsDialog.svelte');
+  const loadAbout = () => import('./features/about/AboutDialog.svelte');
+  // Once loaded, keep them mounted so closing animations and focus return work.
+  let settingsLoaded = $state(false);
+  let aboutLoaded = $state(false);
+  $effect(() => {
+    if (appUi.settingsOpen) settingsLoaded = true;
+    if (appUi.aboutOpen) aboutLoaded = true;
+  });
 
   // --- Never lose work (docs/UX.md § Principles) ---
   const active = $derived(mode === 'send' ? send : receive);
@@ -75,10 +83,10 @@
 <div class="mx-auto flex min-h-dvh max-w-[560px] flex-col px-4">
   <AppHeader title={m.appName}>
     {#snippet actions()}
-      <Button variant="ghost" size="icon" aria-label={m.header.about} onclick={() => (aboutOpen = true)}>
+      <Button variant="ghost" size="icon" aria-label={m.header.about} onclick={() => (appUi.aboutOpen = true)}>
         <CircleHelp class="size-5" aria-hidden="true" />
       </Button>
-      <Button variant="ghost" size="icon" aria-label={m.header.settings} onclick={() => (settingsOpen = true)}>
+      <Button variant="ghost" size="icon" aria-label={m.header.settings} onclick={() => (appUi.settingsOpen = true)}>
         <Settings class="size-5" aria-hidden="true" />
       </Button>
     {/snippet}
@@ -104,6 +112,14 @@
 
 <div class="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
 
-<SettingsDialog bind:open={settingsOpen} />
-<AboutDialog bind:open={aboutOpen} />
+{#if settingsLoaded}
+  {#await loadSettings() then { default: SettingsDialog }}
+    <SettingsDialog bind:open={appUi.settingsOpen} />
+  {/await}
+{/if}
+{#if aboutLoaded}
+  {#await loadAbout() then { default: AboutDialog }}
+    <AboutDialog bind:open={appUi.aboutOpen} />
+  {/await}
+{/if}
 <Toaster position="bottom-center" theme={toasterTheme} closeButton={false} />

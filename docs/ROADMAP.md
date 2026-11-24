@@ -47,12 +47,22 @@ cross-network 1 GiB run needs the deployed site and two networks, so it is still
 - The Nostr adapter speaks NIP-01 directly and uses `@noble/curves` for the signatures. It's a lazy chunk (13 KB gzipped).
 - Not done yet: the browser and OS hint and the verification words on the Approve screen. They move to phase 4.
 
-## Phase 4: Robustness and reach
+## Phase 4: Robustness and reach ✅
 
 - `signaling/manual` (QR / paste, compressed SDP) and `signaling/mqtt`, with automatic fallback across adapters.
 - Settings for relay lists, STUN and TURN. Clear diagnosis when the connection fails ("needs TURN").
 - Progress, speed, ETA, cancel on both sides, and wake lock during transfers.
 - WebKit in the e2e matrix.
+- (from phase 3) Approve screen: device hint and verification words.
+
+Status:
+
+- Manual connect is a transport mode (offer in the link, reply code back), not a `Signaling` adapter. Reply QR
+  scanning uses `BarcodeDetector` where available (Chromium on Android and macOS); everywhere else it's paste.
+- "Automatic fallback" became parallel use of every network (`multiSignaling`), with manual connect offered when
+  all of them fail.
+- WebKit runs in CI on macOS (Playwright's Linux WebKit has no WebRTC). Not yet confirmed on a real CI run.
+- Not done: per-relay health tracking in `localStorage` (ARCHITECTURE § Why this scales). Moves to phase 6.
 
 ## Phase 5: Short codes
 

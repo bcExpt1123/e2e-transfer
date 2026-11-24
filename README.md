@@ -4,7 +4,7 @@
 
 Open the app and drop in a file. Share the link (or, later, a short code like `7-guitar-orbit`). The bytes go directly from one browser to the other over WebRTC, encrypted with a key that never leaves the two devices.
 
-> Status: **MVP (phase 3)**. Link-based transfers work end to end over WebRTC with Nostr signaling. See the [roadmap](docs/ROADMAP.md).
+> Status: **phase 4**. Link-based transfers work end to end over WebRTC, with Nostr + MQTT signaling and a manual (QR / paste) mode that needs no relay at all. See the [roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -40,7 +40,7 @@ Open the app and drop in a file. Share the link (or, later, a short code like `7
 | Send files to a peer via a secret link                   | 3 (MVP) |
 | Multiple files and folders, progress, speed, ETA, cancel | 3–4     |
 | Multi-GB files streamed to disk (no RAM limit)           | 3 (MVP) |
-| Manual signaling (QR / copy-paste), no relay needed      | 4       |
+| Manual connect (QR / copy-paste), no relay needed        | 4 ✅    |
 | Short human codes using a PAKE (CPace)                   | 5       |
 | Resume after disconnect, one-to-many, installable PWA    | 6       |
 
@@ -79,14 +79,14 @@ pnpm check          # everything CI runs, except e2e
 
 Signaling uses public Nostr relays by default. To try it offline between two tabs of the same browser, run
 `localStorage.setItem('e2e-transfer.signaling', 'broadcast')` in the console of both tabs. Deployments can set
-`VITE_SIGNALING_RELAYS` (comma-separated `wss://` URLs) and `VITE_ICE_SERVERS` (JSON `RTCIceServer[]`, e.g. with TURN).
+`VITE_SIGNALING_RELAYS` and `VITE_MQTT_BROKERS` (comma-separated `wss://` URLs) and `VITE_ICE_SERVERS` (JSON `RTCIceServer[]`, e.g. with TURN).
 
 ## Repository layout
 
 ```
 apps/web/            Svelte UI: features/{send,receive,settings}, lib/{ui,state,i18n}
 packages/core/       crypto, protocol, transfer engine, ports (adapter interfaces); framework-agnostic
-packages/signaling/  Signaling adapters: nostr (default), broadcast (tabs/e2e), memory (tests); mqtt, manual later
+packages/signaling/  Signaling adapters: nostr + mqtt (default, used together), broadcast (tabs/e2e), memory (tests)
 packages/storage/    FileSink adapters: fs-access (chosen folder), opfs, memory
 tests/e2e/           Playwright tests
 docs/                architecture, protocol, security, roadmap, ADRs

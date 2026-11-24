@@ -145,7 +145,9 @@ To keep public relays from becoming a bottleneck:
 
 - Publish to several relays at once and track per-relay health (latency, failures) in `localStorage`. Unhealthy relays are skipped.
 - The relay list ships in config and can be overridden per deployment (`VITE_SIGNALING_RELAYS`) or per user in Settings.
-- If the default adapter fails, fall back automatically: nostr → mqtt → manual QR.
+- Use several networks at once (Nostr and MQTT by default) instead of a sequential fallback: a sequential
+  fallback could leave the two peers on different networks when one is blocked for only one of them. If every
+  network fails, the error offers manual connect (QR / paste).
 
 ### Scaling the codebase
 

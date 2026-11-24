@@ -12,10 +12,11 @@ import type { Signaling } from '../ports/signaling.ts';
 import type { Role } from '../protocol/frames.ts';
 import { SignalSession } from '../signaling/envelope.ts';
 import type { MessageChannelLike } from '../transport/channel.ts';
+import { createManualAnswer, createManualOffer, type ManualOffer } from '../transport/manual.ts';
 import { type ConnectOptions, connect } from '../transport/peer.ts';
 import type { RtcFactory } from '../transport/rtc.ts';
 import { type ReceiveOutcome, Receiver, type ReceiverOptions, type ReceiverProgress } from './receiver.ts';
-import { Sender, type SenderOptions, type SenderProgress } from './sender.ts';
+import { type PeerInfo, Sender, type SenderOptions, type SenderProgress } from './sender.ts';
 import { phaseForError, type TransferPhase } from './types.ts';
 
 /** Phases before the engine takes over, then the engine's own phases. */
@@ -28,13 +29,30 @@ export interface LinkOptions {
   iceServers: RTCIceServer[];
   timeouts?: Partial<Pick<ConnectOptions, 'peerTimeoutMs' | 'connectTimeoutMs' | 'joinIntervalMs'>>;
   config?: Partial<TransferConfig>;
+  /** Receiver: device description shown to the sender on the Approve screen. */
+  hint?: string;
+  /** Sender: connect manually (offer in the link, reply pasted back) instead of via signaling. */
+  manual?: boolean;
+  /** Receiver: the offer code from a manual link. */
+  offer?: string;
 }
 
-abstract class LinkSession<P> extends Emitter<{ phase: LinkPhase; progress: P }> {
+export type LinkEvents<P> = {
+  phase: LinkPhase;
+  progress: P;
+  words: readonly string[];
+  /** Manual mode: the code to hand to the other device (sender: the offer for the link; receiver: the reply). */
+  code: string;
+};
+
+abstract class LinkSession<P> extends Emitter<LinkEvents<P>> {
   protected readonly opts: LinkOptions;
   readonly #abort = new AbortController();
   #engine: { cancel(): void } | undefined;
   #signal: SignalSession | undefined;
+  /** What the other device said about itself in signaling (sender side only). */
+  protected peerHint: string | undefined;
+  protected manualOffer: ManualOffer | undefined;
 
   constructor(opts: LinkOptions) {
     super();
@@ -74,6 +92,7 @@ abstract class LinkSession<P> extends Emitter<{ phase: LinkPhase; progress: P }>
     const cfg = resolveConfig(this.opts.config);
     this.emit('phase', 'joining');
     const keys = await deriveLinkKeys(secret);
+    if (this.opts.manual || this.opts.offer) return { channel: await this.#connectManual(role, keys), keys };
     const room = await signaling.join(keys.roomTopic).catch((cause: unknown) => {
       throw isTransferError(cause)
         ? cause
@@ -90,11 +109,36 @@ abstract class LinkSession<P> extends Emitter<{ phase: LinkPhase; progress: P }>
       iceServers,
       ...timeouts,
       abort: this.#abort.signal,
-      onConnecting: () => this.emit('phase', 'connecting'),
+      ...(this.opts.hint && { hint: this.opts.hint }),
+      onConnecting: (peer) => {
+        this.peerHint = peer.hint;
+        this.emit('phase', 'connecting');
+      },
     });
     // The DataChannel is up: nothing more to say on the relays.
     void this.#signal.close().catch(() => {});
     return { channel, keys };
+  }
+
+  async #connectManual(role: Role, keys: LinkKeys): Promise<MessageChannelLike> {
+    const base = {
+      rtc: this.opts.rtc,
+      iceServers: this.opts.iceServers,
+      signalKey: keys.signalKey,
+      abort: this.#abort.signal,
+      ...(this.opts.timeouts?.connectTimeoutMs && { connectTimeoutMs: this.opts.timeouts.connectTimeoutMs }),
+    };
+    if (role === 'sender') {
+      const offer = await createManualOffer(base);
+      this.manualOffer = offer;
+      this.emit('code', offer.code);
+      this.emit('phase', 'waiting');
+      return offer.channel;
+    }
+    const answer = await createManualAnswer({ ...base, offerCode: this.opts.offer ?? '' });
+    this.emit('code', answer.code);
+    this.emit('phase', 'waiting');
+    return answer.channel;
   }
 }
 
@@ -104,6 +148,7 @@ export interface LinkSenderOptions extends LinkOptions {
 }
 
 export class LinkSender extends LinkSession<SenderProgress> {
+  #replied = false;
   readonly #files: SenderOptions['files'];
   readonly #confirmPeer: SenderOptions['confirmPeer'];
 
@@ -114,6 +159,23 @@ export class LinkSender extends LinkSession<SenderProgress> {
     this.#confirmPeer = opts.confirmPeer;
   }
 
+  /**
+   * Manual mode: apply the receiver's reply code. Resolves false if the code is damaged
+   * or belongs to another link (the user can paste again).
+   */
+  async acceptReply(code: string): Promise<boolean> {
+    if (!this.manualOffer) return false;
+    if (this.#replied) return true;
+    try {
+      await this.manualOffer.accept(code);
+    } catch {
+      return false;
+    }
+    this.#replied = true;
+    this.emit('phase', 'connecting');
+    return true;
+  }
+
   /** Resolves when the receiver confirmed every file; rejects with a TransferError. */
   start(): Promise<void> {
     return this.run('sender', (channel, keys) => {
@@ -121,7 +183,10 @@ export class LinkSender extends LinkSession<SenderProgress> {
         sessionIkm: keys.sessionIkm,
         files: this.#files,
         ...(this.opts.config && { config: this.opts.config }),
-        ...(this.#confirmPeer && { confirmPeer: this.#confirmPeer }),
+        ...(this.#confirmPeer && {
+          confirmPeer: (peer: PeerInfo) =>
+            this.#confirmPeer?.(this.peerHint ? { ...peer, hint: this.peerHint } : peer) ?? true,
+        }),
       });
       sender.on('phase', (p) => this.emit('phase', p));
       sender.on('progress', (p) => this.emit('progress', p));
@@ -151,6 +216,7 @@ export class LinkReceiver extends LinkSession<ReceiverProgress> {
       });
       receiver.on('phase', (p) => this.emit('phase', p));
       receiver.on('progress', (p) => this.emit('progress', p));
+      receiver.on('words', (w) => this.emit('words', w));
       return receiver;
     });
   }

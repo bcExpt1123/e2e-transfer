@@ -22,6 +22,7 @@ import {
   pickDirectorySink,
 } from '@e2e-transfer/storage';
 import { baseName, download } from './browser.ts';
+import { describeDevice } from './device.ts';
 import { incoming } from './link.svelte.ts';
 import { createSignaling, iceServers } from './network.ts';
 import { RateMeter, type RateSnapshot } from './rate.ts';
@@ -61,6 +62,10 @@ const defaultDeps: ReceiveDeps = {
 export class ReceiveController {
   phase = $state<ReceivePhase>('idle');
   manifest = $state<Manifest | null>(null);
+  /** Verification words to read out to the sender. */
+  words = $state<readonly string[]>([]);
+  /** Manual mode: the reply code to hand back to the sender. */
+  replyCode = $state<string | null>(null);
   done = $state(0);
   total = $state(0);
   rate = $state<RateSnapshot>({ bytesPerSecond: 0, secondsLeft: null });
@@ -88,6 +93,10 @@ export class ReceiveController {
     return this.#deps.inMemory();
   }
 
+  get manual(): boolean {
+    return incoming.offer !== undefined;
+  }
+
   get busy(): boolean {
     return !['idle', 'reviewing', 'done', 'failed', 'cancelled', 'declined'].includes(this.phase);
   }
@@ -107,6 +116,8 @@ export class ReceiveController {
     this.#session?.cancel();
     this.error = null;
     this.manifest = null;
+    this.words = [];
+    this.replyCode = null;
     this.savedTo = null;
     this.done = 0;
     this.#meter.reset();
@@ -119,6 +130,8 @@ export class ReceiveController {
         signaling: await this.#deps.createSignaling(),
         rtc: this.#deps.rtc,
         iceServers: iceServers(),
+        hint: describeDevice(navigator.userAgent),
+        ...(incoming.offer && { offer: incoming.offer }),
         onManifest: (manifest) => {
           this.manifest = manifest;
           this.total = manifest.total;
@@ -134,6 +147,12 @@ export class ReceiveController {
     this.#session = session;
     session.on('phase', (p) => {
       if (this.#session === session) this.phase = p;
+    });
+    session.on('code', (c) => {
+      if (this.#session === session) this.replyCode = c;
+    });
+    session.on('words', (w) => {
+      if (this.#session === session) this.words = w;
     });
     session.on('progress', ({ received, total }) => {
       if (this.#session !== session) return;

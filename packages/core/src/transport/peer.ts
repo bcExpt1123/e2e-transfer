@@ -28,7 +28,9 @@ export interface ConnectOptions {
   joinIntervalMs?: number;
   abort?: AbortSignal;
   /** Called once the other device has been found and the connection is being set up. */
-  onConnecting?: () => void;
+  onConnecting?: (peer: { hint?: string }) => void;
+  /** Receiver: short device description sent in `join` (e.g. "Firefox on Android"). */
+  hint?: string;
 }
 
 export const CONNECT_DEFAULTS = {
@@ -52,6 +54,9 @@ class Connector {
   #pendingIce: RTCIceCandidateInit[] = [];
   #localSdp: RTCSessionDescriptionInit | undefined;
   #connectTimer: ReturnType<typeof setTimeout> | undefined;
+  #peerHint: string | undefined;
+  /** Candidates that overtook the offer on the relays, by author (receiver side). */
+  readonly #earlyIce = new Map<string, RTCIceCandidateInit[]>();
 
   constructor(opts: ConnectOptions) {
     this.#o = opts;
@@ -77,7 +82,8 @@ class Connector {
 
   #startJoining() {
     const { signal } = this.#o;
-    const join = () => void signal.send('join').catch(() => {});
+    const d = this.#o.hint ? { hint: this.#o.hint } : {};
+    const join = () => void signal.send('join', d).catch(() => {});
     join();
     const interval = setInterval(() => {
       if (this.#peerId) clearInterval(interval);
@@ -110,6 +116,7 @@ class Connector {
       if (msg.t === 'join') {
         if (this.#peerId === undefined) {
           this.#peerId = msg.from;
+          this.#peerHint = cleanHint(msg.d.hint);
           await this.#offer();
         } else if (this.#localSdp && !this.#remoteSet) {
           // The receiver is still asking: our offer was probably lost on the relays.
@@ -125,6 +132,8 @@ class Connector {
       if (msg.t === 'offer') {
         if (this.#peerId === undefined) {
           this.#peerId = msg.from;
+          this.#pendingIce.push(...(this.#earlyIce.get(msg.from) ?? []));
+          this.#earlyIce.clear();
           await this.#answer(sdpOf(msg));
         } else if (this.#localSdp) {
           // A repeated offer means our answer was lost.
@@ -134,16 +143,22 @@ class Connector {
       }
     }
 
-    if (msg.t === 'ice' && this.#peerId !== undefined) {
+    if (msg.t === 'ice') {
       const candidate = msg.d.candidate;
       if (typeof candidate !== 'object' || candidate === null) return;
+      if (this.#peerId === undefined) {
+        // Relays don't preserve order: keep a few until we know who the sender is.
+        const list = this.#earlyIce.get(msg.from) ?? [];
+        if (list.length < 50 && this.#earlyIce.size < 8) this.#earlyIce.set(msg.from, [...list, candidate]);
+        return;
+      }
       if (this.#remoteSet && this.#pc) await this.#pc.addIceCandidate(candidate as RTCIceCandidateInit);
       else this.#pendingIce.push(candidate as RTCIceCandidateInit);
     }
   }
 
   #createPeer(): RtcPeerLike {
-    this.#o.onConnecting?.();
+    this.#o.onConnecting?.(this.#peerHint ? { hint: this.#peerHint } : {});
     const pc = this.#o.rtc({ iceServers: this.#o.iceServers });
     this.#pc = pc;
     const peerId = this.#peerId;
@@ -256,4 +271,15 @@ function sdpOf(msg: SignalMessage): string {
     throw new TransferError(ErrorCode.ProtocolError, `malformed ${msg.t}`);
   }
   return sdp;
+}
+
+// C0/C1 controls and bidi overrides: the hint is shown in the UI.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control characters is the point
+const UNSAFE_CHARS = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
+
+/** The hint is unauthenticated decoration from the peer: keep it short and printable. */
+function cleanHint(v: unknown): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const s = v.replace(UNSAFE_CHARS, '').trim().slice(0, 48);
+  return s || undefined;
 }

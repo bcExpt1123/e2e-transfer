@@ -17,6 +17,9 @@ export interface RtcDataChannelLike extends EventTarget {
 
 export interface RtcPeerLike extends EventTarget {
   readonly connectionState: RTCPeerConnectionState;
+  readonly iceGatheringState: RTCIceGatheringState;
+  /** The local SDP; includes gathered candidates once gathering is complete. */
+  readonly localDescription: { readonly sdp: string } | null;
   createDataChannel(label: string, init?: RTCDataChannelInit): RtcDataChannelLike;
   createOffer(): Promise<RTCSessionDescriptionInit>;
   createAnswer(): Promise<RTCSessionDescriptionInit>;

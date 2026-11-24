@@ -7,6 +7,7 @@ import {
   type LinkPhase,
   LinkReceiver,
   LinkSender,
+  SAS_WORDS,
   type Signaling,
 } from '../src/index.ts';
 import { FakeDataChannel, FakePeer, type FakeRtcOptions, fakeRtc } from '../src/testing/index.ts';
@@ -90,6 +91,34 @@ describe('LinkSender / LinkReceiver over WebRTC (fake)', () => {
     expect(rtc.peers[0]?.config.iceServers).toEqual(base.iceServers);
     await new Promise((r) => setTimeout(r, 0));
     expect(hub.left).toBe(2);
+  });
+
+  it('shows the same verification words on both sides, plus the receiver’s device hint', async () => {
+    const { base } = world();
+    const seen: { words: readonly string[]; hint?: string }[] = [];
+    const sender = new LinkSender({
+      ...base,
+      files: [file(10)],
+      confirmPeer: (peer) => {
+        seen.push(peer);
+        return false;
+      },
+    });
+    const receiver = new LinkReceiver({
+      ...base,
+      hint: 'Firefox on Android\u202e\n',
+      onManifest: () => null,
+    });
+    let receiverWords: readonly string[] = [];
+    receiver.on('words', (w) => {
+      receiverWords = w;
+    });
+    await Promise.allSettled([sender.start(), receiver.start()]);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.words).toHaveLength(4);
+    expect(seen[0]?.words).toEqual(receiverWords);
+    expect(seen[0]?.hint).toBe('Firefox on Android');
+    for (const w of receiverWords) expect(SAS_WORDS).toContain(w);
   });
 
   it('lets the sender decline an unexpected receiver', async () => {
